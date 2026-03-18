@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ciao Transfer — NCC Manager</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--pr:#2563eb;--pr-l:#eff6ff;--ok:#16a34a;--ok-l:#f0fdf4;--err:#dc2626;--err-l:#fef2f2;--warn:#d97706;--warn-l:#fffbeb;--tx:#0f172a;--mu:#64748b;--bd:#e2e8f0;--bg:#f8fafc;--su:#fff;--sb:#0f172a;--r:10px}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--tx);min-height:100vh;display:flex;font-size:14px;line-height:1.5}
+#sidebar{width:220px;min-height:100vh;background:var(--sb);position:fixed;top:0;left:0;bottom:0;display:flex;flex-direction:column;z-index:50;overflow-y:auto}
+.sb-logo{padding:16px;border-bottom:1px solid #1e293b}
+.sb-brand{font-size:14px;font-weight:700;color:#f8fafc;display:flex;align-items:center;gap:8px}
+.sb-sub{font-size:10px;color:#475569;margin-top:2px}
+.sb-sync{font-size:10px;margin-top:5px;padding:3px 8px;border-radius:4px;display:inline-flex;align-items:center;gap:5px}
+.sb-sync.ok{background:#052e16;color:#86efac}.sb-sync.err{background:#450a0a;color:#fca5a5}.sb-sync.loading{background:#1e293b;color:#94a3b8}
+.sb-sec{padding:12px 0 3px 14px;font-size:9px;font-weight:700;color:#334155;text-transform:uppercase;letter-spacing:1.2px}
+.ni{padding:9px 14px;display:flex;align-items:center;gap:9px;color:#94a3b8;cursor:pointer;border-left:3px solid transparent;font-size:13px;transition:all .12s;user-select:none}
+.ni:hover{background:#1e293b;color:#cbd5e1}
+.ni.active{background:#1e293b;color:#60a5fa;border-left-color:#3b82f6}
+.ni svg{flex-shrink:0;opacity:.7}.ni.active svg{opacity:1}
+.sb-ft{margin-top:auto;padding:12px 14px;border-top:1px solid #1e293b;font-size:10px;color:#475569}
+#main{margin-left:220px;flex:1;display:flex;flex-direction:column;min-height:100vh}
+.topbar{background:var(--su);border-bottom:1px solid var(--bd);padding:11px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:20}
+.tb-title{font-size:15px;font-weight:600}
+.tb-right{display:flex;gap:8px}
+.content{padding:20px 24px;flex:1}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+.sc{background:var(--su);border-radius:var(--r);border:1px solid var(--bd);padding:14px 16px}
+.sc-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--mu);margin-bottom:7px}
+.sc-val{font-size:22px;font-weight:700;line-height:1}
+.sc-sub{font-size:11px;color:var(--mu);margin-top:4px}
+.sc.g .sc-val{color:var(--ok)}.sc.b .sc-val{color:var(--pr)}.sc.r .sc-val{color:var(--err)}.sc.a .sc-val{color:var(--warn)}
+.card{background:var(--su);border-radius:var(--r);border:1px solid var(--bd);padding:16px 20px;margin-bottom:16px}
+.ch{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px;flex-wrap:wrap;gap:8px}
+.ct{font-size:14px;font-weight:600}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;white-space:nowrap}
+th{padding:7px 10px;text-align:left;background:#f8fafc;color:var(--mu);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--bd)}
+td{padding:9px 10px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#f8fafc}
+.fg{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:11px}
+.fgroup{display:flex;flex-direction:column;gap:4px}
+.fl{font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.4px}
+input[type=text],input[type=number],input[type=date],input[type=email],input[type=tel],select,textarea{border:1px solid #d1d5db;border-radius:7px;padding:7px 10px;font-size:13px;color:var(--tx);background:var(--su);width:100%;transition:border .15s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--pr);box-shadow:0 0 0 3px rgba(37,99,235,.07)}
+textarea{resize:vertical;min-height:56px}
+.chk{display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer}
+.chk input[type=checkbox]{width:15px;height:15px;accent-color:var(--pr)}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 13px;border-radius:7px;font-size:13px;font-weight:500;cursor:pointer;border:none;transition:all .12s;line-height:1.2}
+.btn-pr{background:var(--pr);color:#fff}.btn-pr:hover{background:#1d4ed8}
+.btn-sec{background:var(--su);color:var(--tx);border:1px solid var(--bd)}.btn-sec:hover{background:#f8fafc}
+.btn-ok{background:var(--ok);color:#fff}.btn-ok:hover{background:#15803d}
+.btn-warn{background:var(--warn);color:#fff}.btn-warn:hover{background:#b45309}
+.btn-gh{background:transparent;color:var(--mu);border:none;padding:3px 6px;border-radius:5px;cursor:pointer;font-size:12px}
+.btn-gh:hover{color:var(--err);background:var(--err-l)}
+.btn-ed{background:transparent;color:var(--pr);border:none;padding:3px 6px;border-radius:5px;cursor:pointer;font-size:12px}
+.btn-ed:hover{background:var(--pr-l)}
+.btn-sm{padding:5px 10px;font-size:12px}
+.btn-xs{padding:3px 8px;font-size:11px;border-radius:5px}
+.badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.b-g{background:#dcfce7;color:#166534}.b-b{background:#dbeafe;color:#1e40af}.b-a{background:#fef3c7;color:#92400e}.b-r{background:#fee2e2;color:#991b1b}.b-gr{background:#f1f5f9;color:#475569}.b-pu{background:#ede9fe;color:#5b21b6}.b-te{background:#f0fdfa;color:#0f766e}.b-pi{background:#fdf2f8;color:#9d174d}.b-or{background:#fff7ed;color:#9a3412}
+.mbg{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}
+.modal{background:var(--su);border-radius:14px;padding:24px;width:700px;max-width:100%;max-height:90vh;overflow-y:auto;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.18)}
+.modal.wide{width:860px}
+.mh{font-size:16px;font-weight:700;margin-bottom:16px}
+.mclose{position:absolute;top:12px;right:12px;background:none;border:none;font-size:18px;cursor:pointer;color:var(--mu);padding:4px;border-radius:4px}
+.mclose:hover{color:var(--err);background:var(--err-l)}
+.mf{margin-top:16px;display:flex;gap:8px;justify-content:flex-end;padding-top:14px;border-top:1px solid var(--bd)}
+.filters{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.filters select{width:auto}
+.flbl{font-size:11px;font-weight:700;color:var(--mu)}
+.sep{height:1px;background:var(--bd);margin:12px 0}
+.mt8{margin-top:8px}.mt12{margin-top:12px}
+.fw6{font-weight:600}.fs11{font-size:11px}.fs12{font-size:12px}.fs13{font-size:13px}
+.mu{color:var(--mu)}.tok{color:var(--ok)}.terr{color:var(--err)}.tpr{color:var(--pr)}.twarn{color:var(--warn)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.empty{padding:36px 20px;text-align:center;color:var(--mu)}
+.empty-t{font-size:14px;font-weight:600;color:var(--tx);margin-bottom:5px}
+.ride-summary{border-radius:8px;padding:12px 14px;margin-top:10px;font-size:13px;line-height:1.8;border:1px solid #bbf7d0;background:#f0fdf4}
+.ride-summary.warn{background:var(--warn-l);border-color:#fde68a}
+.ride-summary .sr{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(0,0,0,.05);padding:3px 0}
+.ride-summary .sr:last-child{border-bottom:none;font-weight:700;padding-top:6px;margin-top:3px;font-size:14px}
+.bar-list{display:flex;flex-direction:column;gap:8px}
+.br{display:grid;grid-template-columns:140px 1fr 80px;align-items:center;gap:9px;font-size:12px}
+.bl{text-align:right;color:var(--mu);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt{background:#f1f5f9;border-radius:5px;height:15px;overflow:hidden}
+.bf{height:100%;background:var(--pr);border-radius:5px}
+.bf.g{background:var(--ok)}.bf.r{background:var(--err)}.bf.a{background:var(--warn)}.bf.pu{background:#7c3aed}.bf.te{background:#0d9488}
+.bv{font-weight:600}
+.info-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:13px}
+.info-row:last-child{border-bottom:none}
+.tag-duo{display:flex;gap:3px;flex-wrap:wrap}
+/* Statement styles */
+.stmt-box{border:1px solid var(--bd);border-radius:var(--r);overflow:hidden;margin-bottom:16px}
+.stmt-head{background:#f8fafc;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--bd)}
+.stmt-name{font-size:15px;font-weight:700}
+.stmt-body{padding:0}
+.stmt-section{padding:10px 16px 4px;background:#fafafa;border-bottom:1px solid #f1f5f9;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--mu)}
+.stmt-row{display:grid;grid-template-columns:80px 1fr 80px 80px 70px 90px 90px;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid #f8fafc;font-size:12px}
+.stmt-row:hover{background:#f8fafc}
+.stmt-footer{padding:12px 16px;background:#f0fdf4;border-top:1px solid #bbf7d0;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.stmt-footer.owe{background:var(--warn-l);border-top-color:#fde68a}
+.stmt-total{font-size:17px;font-weight:700}
+.paid-mark{opacity:.5;text-decoration:line-through}
+.loading-overlay{position:fixed;inset:0;background:rgba(248,250,252,.9);z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
+.spinner{width:36px;height:36px;border:3px solid #e2e8f0;border-top-color:var(--pr);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:1200px){.stat-grid{grid-template-columns:repeat(2,1fr)}.two,.three{grid-template-columns:1fr}}
+/* Calendar view */
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:0;border:1px solid var(--bd);border-radius:var(--r);overflow:hidden}
+.cal-day-hdr{background:#f8fafc;padding:8px 6px;text-align:center;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mu);border-bottom:1px solid var(--bd);border-right:1px solid var(--bd)}
+.cal-day-hdr:last-child{border-right:none}
+.cal-cell{min-height:100px;padding:5px;border-right:1px solid var(--bd);border-bottom:1px solid var(--bd);background:var(--su);vertical-align:top;position:relative}
+.cal-cell:nth-child(7n){border-right:none}
+.cal-cell.other-month{background:#f8fafc}
+.cal-cell.today{background:#eff6ff}
+.cal-num{font-size:11px;font-weight:700;color:var(--mu);margin-bottom:3px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;border-radius:50%}
+.cal-cell.today .cal-num{background:var(--pr);color:#fff}
+.cal-ride{font-size:10px;padding:2px 5px;border-radius:3px;margin-bottom:2px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.4}
+.cal-ride:hover{opacity:.85}
+.cal-ride.cash{background:#dcfce7;color:#166534}
+.cal-ride.card{background:#dbeafe;color:#1e40af}
+.cal-ride.voucher{background:#fef3c7;color:#92400e}
+.cal-ride.other{background:#f1f5f9;color:#475569}
+.cal-more{font-size:10px;color:var(--pr);padding:1px 4px}
+.cal-cell{cursor:pointer}
+.cal-cell:hover{background:#f0f9ff}
+.cal-cell.other-month{cursor:default}
+.cal-cell.other-month:hover{background:#f8fafc}
+/* Day panel */
+.day-panel{background:var(--su);border-radius:var(--r);border:1px solid var(--bd);margin-top:14px;overflow:hidden}
+.day-panel-head{background:#f8fafc;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--bd)}
+.day-panel-title{font-size:15px;font-weight:700}
+.day-ride-row{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #f1f5f9;cursor:pointer;transition:background .1s}
+.day-ride-row:last-child{border-bottom:none}
+.day-ride-row:hover{background:#f0f9ff}
+.day-ride-time{font-size:13px;font-weight:700;color:var(--pr);min-width:45px}
+.day-ride-route{flex:1;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.day-ride-pax{font-size:11px;color:var(--mu)}
+.day-ride-earn{font-size:13px;font-weight:700;min-width:70px;text-align:right}
+/* Statement stmt-row fix */
+.stmt-row{display:grid;grid-template-columns:75px minmax(0,1fr) 120px 80px 70px 85px 60px;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid #f8fafc;font-size:12px}
+.stmt-row:hover{background:#f8fafc}
+</style>
+</head>
+<body>
+
+<div id="loading-overlay" class="loading-overlay">
+  <div class="spinner"></div>
+  <div style="font-size:14px;color:var(--mu)">Connecting to cloud...</div>
+</div>
+
+<nav id="sidebar">
+  <div class="sb-logo">
+    <div class="sb-brand">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2.5"><path d="M5 17H3a2 2 0 01-2-2V5a2 2 0 012-2h11a2 2 0 012 2v3M9 17h10l4-4V9a2 2 0 00-2-2h-2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>
+      Ciao Transfer
+    </div>
+    <div class="sb-sub">NCC Manager v6</div>
+    <div class="sb-sync loading" id="sync-status">
+      <svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="currentColor"/></svg>Connecting...
+    </div>
+  </div>
+  <div class="sb-sec">Setup</div>
+  <div class="ni active" id="nav-company" onclick="go('company')"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Company Info</div>
+  <div class="ni" id="nav-drivers" onclick="go('drivers')"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>Drivers</div>
+  <div class="sb-sec">Directory</div>
+  <div class="ni" id="nav-contacts" onclick="go('contacts')"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Contacts</div>
+  <div class="sb-sec">Operations</div>
+  <div class="ni" id="nav-rides" onclick="go('rides')"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>Rides</div>
+  <div class="ni" id="nav-expenses" onclick="go('expenses')"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg>Expenses</div>
+  <div class="sb-sec">Analysis</div>
+  <div class="ni" id="nav-stats" onclick="go('stats')"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Statistics</div>
+  <div class="ni" id="nav-statements" onclick="go('statements')"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Statements</div>
+  <div class="sb-ft">
+    <div id="sb-date"></div>
+    <div style="margin-top:2px">Firebase Firestore</div>
+  </div>
+</nav>
+
+<div id="main">
+  <div class="topbar">
+    <div class="tb-title" id="tb-title">Company Info</div>
+    <div class="tb-right">
+      <button class="btn btn-sec btn-sm" onclick="exportBackup()">&#8595; Backup</button>
+      <button class="btn btn-sec btn-sm" onclick="document.getElementById('imp').click()">&#8593; Restore</button>
+      <input type="file" id="imp" accept=".json" style="display:none" onchange="importBackup(event)">
+    </div>
+  </div>
+  <div class="content" id="content"></div>
+</div>
+<div id="mc"></div>
+
+<script>
+firebase.initializeApp({
+  apiKey:"AIzaSyAYH9m3Vfhq9jFF0RLwoXCwFoPo_XjS-9k",
+  authDomain:"ciao-transfer.firebaseapp.com",
+  projectId:"ciao-transfer",
+  storageBucket:"ciao-transfer.firebasestorage.app",
+  messagingSenderId:"1021685684865",
+  appId:"1:1021685684865:web:8aceaf675a828a20c50b80"
+});
+const db = firebase.firestore();
+
+// ── STATE ──────────────────────────────────────────
+let TAB='company', fM=new Date().getMonth(), fY=new Date().getFullYear();
+let stmtContact='', stmtM=new Date().getMonth(), stmtY=new Date().getFullYear();
+let stmtFrom='', stmtTo='';
+let ridesView='list';
+let DATA={company:{},drivers:[],contacts:[],rides:[],expenses:[],payments:[]};
+let LOADED={company:false,drivers:false,contacts:false,rides:false,expenses:false,payments:false};
+
+function chkLoad(){
+  if(Object.values(LOADED).every(Boolean)){
+    document.getElementById('loading-overlay').style.display='none';
+    setSS('ok'); render();
+  }
+}
+function setSS(s){
+  const e=document.getElementById('sync-status');if(!e)return;
+  e.className='sb-sync '+s;
+  const dot='<svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="currentColor"/></svg>';
+  e.innerHTML=dot+(s==='ok'?' Cloud synced':s==='err'?' Offline':' Connecting...');
+}
+
+db.collection('company').doc('info').onSnapshot(s=>{if(s.exists)DATA.company=s.data();LOADED.company=true;chkLoad();},()=>{LOADED.company=true;setSS('err');chkLoad();});
+['drivers','contacts','rides','expenses','payments'].forEach(col=>{
+  db.collection(col).orderBy('createdAt','asc').onSnapshot(s=>{
+    DATA[col]=s.docs.map(d=>({id:d.id,...d.data()}));
+    LOADED[col]=true;chkLoad();
+    if(Object.values(LOADED).every(Boolean))render();
+  },()=>{LOADED[col]=true;setSS('err');chkLoad();});
+});
+
+// ── CONSTANTS ──────────────────────────────────────
+const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const YEARS=()=>{const a=[];for(let y=new Date().getFullYear();y>=2023;y--)a.push(y);return a};
+const METHODS=['Cash','Card','Bank transfer','Voucher (settle later)','PayPal / Stripe'];
+const VEHICLES=['Business Sedan (1–3 pax)','Standard Minivan (up to 8 pax)','Business Minivan (up to 7 pax)'];
+const EXP_CATS=['Fuel','Motorway / Tolls','ZTL Ticket','Car wash','Insurance','Maintenance / Mechanic','Tyres','Parking','Accountant','Software / Subscriptions','Meals / Travel','Other'];
+const TABS={company:'Company Info',drivers:'Drivers',contacts:'Contacts',rides:'Rides',expenses:'Expenses',stats:'Statistics',statements:'Statements'};
+const METH_BADGE={Cash:'b-g',Card:'b-b','Bank transfer':'b-pu','Voucher (settle later)':'b-a','PayPal / Stripe':'b-te'};
+
+// ── HELPERS ────────────────────────────────────────
+const eu=n=>'€ '+Number(n||0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+const today=()=>new Date().toISOString().slice(0,10);
+const inF=d=>{if(!d)return false;const x=new Date(d);return x.getMonth()===fM&&x.getFullYear()===fY};
+const inRange=(d,from,to)=>{if(!d)return false;const x=d;return(!from||x>=from)&&(!to||x<=to)};
+const inPeriod=(d,m,y)=>{if(!d)return false;const x=new Date(d);return x.getMonth()===m&&x.getFullYear()===y};
+const g=id=>{const e=document.getElementById(id);return e?e.value:''};
+const cN=id=>{if(id==='CT')return'Ciao Transfer';const c=DATA.contacts.find(x=>x.id===id);return c?c.name:'—'};
+const auN=id=>{const a=DATA.drivers.find(x=>x.id===id);return a?a.name:'—'};
+const bm=(m,short=false)=>{
+  if(!m)return'';
+  const label=short?{Cash:'Cash',Card:'Card','Bank transfer':'Bank','Voucher (settle later)':'Voucher','PayPal / Stripe':'PayPal'}[m]||m:m;
+  return`<span class="badge ${METH_BADGE[m]||'b-gr'}">${label}</span>`;
+};
+
+// ── CORE FINANCIAL LOGIC ───────────────────────────
+// CT earns = price - commission on ALL rides where CT is supplier (incl. vouchers)
+// Voucher = earned but pending bank transfer
+function rideEarned(r){
+  if(r.is_intermediate) return +r.price - (+r.commission||0) - (+r.sub_price||0);
+  if(r.supplier_id!=='CT') return 0;
+  return +r.price - (+r.commission||0);
+}
+
+// Cash CT collected physically
+function rideCashCollected(r){
+  if(r.method!=='Cash') return 0;
+  if(!r.is_intermediate&&r.supplier_id!=='CT') return 0;
+  return +r.price;
+}
+// Card CT collected physically
+function rideCardCollected(r){
+  if(r.method!=='Card') return 0;
+  if(!r.is_intermediate&&r.supplier_id!=='CT') return 0;
+  return +r.price;
+}
+// Voucher amount pending bank transfer (CT is supplier)
+function rideVoucherPending(r){
+  if(r.method!=='Voucher (settle later)') return 0;
+  if(!r.is_intermediate&&r.supplier_id!=='CT') return 0;
+  return +r.price - (+r.commission||0);
+}
+
+// ── CONTACT BALANCE ────────────────────────────────
+// positive = contact owes CT | negative = CT owes contact
+function rawBalance(contactId, rides){
+  let bal=0;
+  (rides||DATA.rides).forEach(r=>{
+    const isVoucher=r.method==='Voucher (settle later)';
+    const isSubVoucher=r.is_intermediate&&r.sub_method==='Voucher (settle later)';
+    if(r.is_intermediate){
+      // Intermediate: CT receives from client, pays sub_supplier
+      // Client side (who sent ride to CT)
+      if(r.client_id===contactId){
+        if(isVoucher) bal+= +r.price;            // client owes CT the full price via bank
+        else bal-= (+r.commission||0);            // CT owes commission back to client
+      }
+      // Sub-supplier side (who CT sends the ride to)
+      if(r.sub_supplier_id===contactId){
+        if(isSubVoucher) bal-= +r.sub_price;     // CT owes sub-supplier their price
+        else bal-= (+r.sub_commission||0);        // CT owes sub-supplier their commission
+      }
+    } else {
+      if(isVoucher){
+        if(r.client_id===contactId&&r.supplier_id==='CT') bal+= +r.price;
+        if(r.supplier_id===contactId&&r.client_id==='CT') bal-= +r.price;
+      } else {
+        if(r.client_id===contactId&&r.supplier_id==='CT') bal-= (+r.commission||0);
+        if(r.supplier_id===contactId&&r.client_id==='CT') bal+= (+r.commission||0);
+      }
+    }
+  });
+  return bal;
+}
+
+function paidAmount(contactId, m, y){
+  return DATA.payments
+    .filter(p=>p.contact_id===contactId&&(!m||inPeriod(p.date,m,y)))
+    .reduce((s,p)=>s+(p.direction==='ct_to_contact'?-1:1)*(+p.amount),0);
+}
+
+function contactBalance(contactId){
+  return rawBalance(contactId)+paidAmount(contactId);
+}
+
+// ── STATEMENT for one contact, one period ──────────
+function buildStatement(contactId, from, to){
+  const rides=DATA.rides.filter(r=>inRange(r.date,from,to)&&(r.client_id===contactId||r.supplier_id===contactId||r.sub_supplier_id===contactId));
+  const payments=DATA.payments.filter(p=>p.contact_id===contactId&&inRange(p.date,from,to));
+  // Financial summary
+  let totalPrice=0, ctCommOwed=0, ctCommEarned=0, voucherOwed=0, voucherWePay=0, subPriceOwed=0;
+  rides.forEach(r=>{
+    const isV=r.method==='Voucher (settle later)';
+    const isSubV=r.is_intermediate&&r.sub_method==='Voucher (settle later)';
+    if(r.is_intermediate){
+      if(r.client_id===contactId){
+        totalPrice+= +r.price;
+        if(isV) voucherOwed+= +r.price;
+        else ctCommOwed+= (+r.commission||0);
+      }
+      if(r.sub_supplier_id===contactId){
+        if(isSubV) voucherWePay+= +r.sub_price;
+        else ctCommEarned+= (+r.sub_commission||0);
+        subPriceOwed+= +r.sub_price;
+      }
+    } else {
+      if(r.supplier_id==='CT'&&r.client_id===contactId){
+        totalPrice+= +r.price;
+        if(isV) voucherOwed+= +r.price;
+        else ctCommOwed+= (+r.commission||0);
+      }
+      if(r.supplier_id===contactId&&r.client_id==='CT'){
+        if(isV) voucherWePay+= +r.price;
+        else ctCommEarned+= (+r.commission||0);
+      }
+    }
+  });
+  const paidByContact=payments.filter(p=>p.direction==='contact_to_ct').reduce((s,p)=>s+ +p.amount,0);
+  const paidByCT=payments.filter(p=>p.direction==='ct_to_contact').reduce((s,p)=>s+ +p.amount,0);
+  // Net: positive = contact still owes CT, negative = CT still owes contact
+  const gross=voucherOwed-voucherWePay-ctCommOwed+ctCommEarned;
+  const net=gross+paidByContact-paidByCT;
+  return{rides,payments,totalPrice,ctCommOwed,ctCommEarned,voucherOwed,voucherWePay,subPriceOwed,paidByContact,paidByCT,gross,net};
+}
+
+function fsel(onChange='render()'){
+  return `<span class="flbl">Period:</span>
+  <select onchange="fM=+this.value;${onChange}">${MONTHS.map((m,i)=>`<option value="${i}"${i===fM?' selected':''}>${m}</option>`).join('')}</select>
+  <select onchange="fY=+this.value;${onChange}">${YEARS().map(y=>`<option value="${y}"${y===fY?' selected':''}>${y}</option>`).join('')}</select>`;
+}
+
+function barchart(obj,cls=''){
+  const ent=Object.entries(obj).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
+  if(!ent.length)return`<p class="mu fs12">No data for this period</p>`;
+  const mx=Math.max(...ent.map(x=>x[1]),1);
+  return`<div class="bar-list">${ent.map(([k,v])=>`<div class="br"><div class="bl" title="${k}">${k}</div><div class="bt"><div class="bf ${cls}" style="width:${(v/mx*100).toFixed(1)}%"></div></div><div class="bv">${eu(v)}</div></div>`).join('')}</div>`;
+}
+
+// ── NAV ────────────────────────────────────────────
+function go(t){
+  TAB=t;
+  document.querySelectorAll('.ni').forEach(x=>x.classList.remove('active'));
+  const e=document.getElementById('nav-'+t);if(e)e.classList.add('active');
+  document.getElementById('tb-title').textContent=TABS[t]||t;
+  render();
+}
+function render(){
+  const m={company:rCompany,drivers:rDrivers,contacts:rContacts,rides:rRides,expenses:rExpenses,stats:rStats,statements:rStatements};
+  document.getElementById('content').innerHTML=(m[TAB]||rCompany)();
+}
+
+// ── COMPANY ────────────────────────────────────────
+function rCompany(){
+  const c=DATA.company;
+  return`<div class="card" style="max-width:680px">
+<div class="ch"><span class="ct">Company information</span><button class="btn btn-pr btn-sm" onclick="saveCompany()">Save</button></div>
+<div class="fg">
+  <div class="fgroup"><label class="fl">Company name</label><input type="text" id="az-nome" value="${c.nome||'Ciao Transfer'}"></div>
+  <div class="fgroup"><label class="fl">VAT (P.IVA)</label><input type="text" id="az-piva" value="${c.piva||''}"></div>
+  <div class="fgroup"><label class="fl">Phone / WhatsApp</label><input type="tel" id="az-tel" value="${c.tel||'+39 388 791 3429'}"></div>
+  <div class="fgroup"><label class="fl">Email</label><input type="email" id="az-email" value="${c.email||'info@myciaotransfer.com'}"></div>
+  <div class="fgroup"><label class="fl">Website</label><input type="text" id="az-sito" value="${c.sito||'myciaotransfer.com'}"></div>
+  <div class="fgroup"><label class="fl">NCC Licence No.</label><input type="text" id="az-lic" value="${c.licenza||''}"></div>
+</div>
+<div class="fgroup mt8"><label class="fl">Address</label><input type="text" id="az-ind" value="${c.indirizzo||'Via Vigna del Piano 29, Riano (RM)'}"></div>
+<div class="fgroup mt8"><label class="fl">Internal notes</label><textarea id="az-note">${c.note||''}</textarea></div>
+</div>`;
+}
+function saveCompany(){
+  const obj={};
+  ['nome','piva','tel','email','sito','licenza','indirizzo','note'].forEach(k=>{const e=document.getElementById('az-'+k);if(e)obj[k]=e.value});
+  db.collection('company').doc('info').set(obj).then(()=>alert('Saved.')).catch(()=>alert('Error.'));
+}
+
+// ── DRIVERS ────────────────────────────────────────
+function rDrivers(){
+  return`<div class="card">
+<div class="ch"><span class="ct">Drivers (${DATA.drivers.length})</span><button class="btn btn-pr btn-sm" onclick="editDriver()">+ Add driver</button></div>
+${DATA.drivers.length===0?`<div class="empty"><div class="empty-t">No drivers yet</div></div>`:`
+<div class="tw"><table>
+<thead><tr><th>Name</th><th>Phone</th><th>Email</th><th>Licence</th><th>Expiry</th><th>Notes</th><th></th></tr></thead>
+<tbody>${DATA.drivers.map(a=>{
+  const exp=a.scad?new Date(a.scad)<new Date():false;
+  return`<tr><td class="fw6">${a.name}</td><td>${a.tel||'—'}</td><td>${a.email||'—'}</td><td>${a.licence||'—'}</td>
+  <td>${a.scad?`<span class="badge ${exp?'b-r':'b-g'}">${a.scad}${exp?' EXPIRED':''}</span>`:'—'}</td>
+  <td class="mu fs12">${a.note||''}</td>
+  <td style="display:flex;gap:3px"><button class="btn-ed" onclick="editDriver('${a.id}')">edit</button><button class="btn-gh" onclick="del('drivers','${a.id}')">✕</button></td>
+  </tr>`;}).join('')}</tbody></table></div>`}
+</div>`;
+}
+function editDriver(id){
+  const a=DATA.drivers.find(x=>x.id===id)||{};
+  showM(`<div class="mh">${id?'Edit':'New'} driver</div>
+<div class="fg">
+  <div class="fgroup"><label class="fl">Full name *</label><input type="text" id="f-name" value="${a.name||''}"></div>
+  <div class="fgroup"><label class="fl">Phone</label><input type="tel" id="f-tel" value="${a.tel||''}"></div>
+  <div class="fgroup"><label class="fl">Email</label><input type="email" id="f-email" value="${a.email||''}"></div>
+  <div class="fgroup"><label class="fl">Licence number</label><input type="text" id="f-lic" value="${a.licence||''}"></div>
+  <div class="fgroup"><label class="fl">Licence expiry</label><input type="date" id="f-scad" value="${a.scad||''}"></div>
+</div>
+<div class="fgroup mt8"><label class="fl">Notes</label><textarea id="f-note">${a.note||''}</textarea></div>
+<div class="mf"><button class="btn btn-sec" onclick="closeM()">Cancel</button><button class="btn btn-pr" onclick="saveDriver('${id||''}')">Save</button></div>`);
+}
+function saveDriver(id){
+  const name=g('f-name').trim();if(!name)return alert('Name required.');
+  const obj={name,tel:g('f-tel'),email:g('f-email'),licence:g('f-lic'),scad:g('f-scad'),note:g('f-note'),createdAt:DATA.drivers.find(x=>x.id===id)?.createdAt||Date.now()};
+  (id?db.collection('drivers').doc(id):db.collection('drivers').doc()).set(obj).then(closeM).catch(()=>alert('Error.'));
+}
+
+// ── CONTACTS ───────────────────────────────────────
+function rContacts(){
+  return`<div class="card">
+<div class="ch"><span class="ct">Contacts (${DATA.contacts.length})</span><button class="btn btn-pr btn-sm" onclick="editContact()">+ Add contact</button></div>
+<p class="mu fs12" style="margin-bottom:12px">A contact can be a <strong>Client</strong> (sends rides to CT), a <strong>Supplier</strong> (receives rides from CT), or <strong>both</strong> (like RLT).</p>
+${DATA.contacts.length===0?`<div class="empty"><div class="empty-t">No contacts yet</div></div>`:`
+<div class="tw"><table>
+<thead><tr><th>Name</th><th>Type</th><th>VAT</th><th>Phone</th><th>Email</th><th>Overall balance</th><th>Notes</th><th></th></tr></thead>
+<tbody>${DATA.contacts.map(c=>{
+  const tags=[c.is_client?`<span class="badge b-b">Client</span>`:'',c.is_supplier?`<span class="badge b-pu">Supplier</span>`:''].filter(Boolean).join(' ');
+  const bal=contactBalance(c.id);
+  const bb=bal>0.01?`<span class="badge b-g">${eu(bal)} owes CT</span>`:bal<-0.01?`<span class="badge b-r">${eu(Math.abs(bal))} CT owes</span>`:`<span class="badge b-gr">Even</span>`;
+  return`<tr>
+  <td class="fw6">${c.name}</td><td><div class="tag-duo">${tags}</div></td>
+  <td class="fs12">${c.piva||'—'}</td><td>${c.tel||'—'}</td><td class="fs12">${c.email||'—'}</td>
+  <td>${bb}</td><td class="mu fs12" style="max-width:100px;overflow:hidden;text-overflow:ellipsis">${c.note||''}</td>
+  <td style="display:flex;gap:3px"><button class="btn-ed" onclick="editContact('${c.id}')">edit</button><button class="btn-gh" onclick="del('contacts','${c.id}')">✕</button></td>
+  </tr>`;}).join('')}</tbody></table></div>`}
+</div>`;
+}
+function editContact(id){
+  const c=DATA.contacts.find(x=>x.id===id)||{};
+  showM(`<div class="mh">${id?'Edit':'New'} contact</div>
+<div class="fg">
+  <div class="fgroup"><label class="fl">Name / Company *</label><input type="text" id="f-name" value="${c.name||''}"></div>
+  <div class="fgroup"><label class="fl">VAT number</label><input type="text" id="f-piva" value="${c.piva||''}"></div>
+  <div class="fgroup"><label class="fl">Phone / WhatsApp</label><input type="tel" id="f-tel" value="${c.tel||''}"></div>
+  <div class="fgroup"><label class="fl">Email</label><input type="email" id="f-email" value="${c.email||''}"></div>
+</div>
+<div class="sep"></div>
+<label class="chk"><input type="checkbox" id="f-iscl" ${c.is_client?'checked':''}> <strong>Client</strong> — sends rides to Ciao Transfer</label>
+<label class="chk mt8"><input type="checkbox" id="f-issu" ${c.is_supplier?'checked':''}> <strong>Supplier</strong> — receives rides from Ciao Transfer</label>
+<p class="mu fs12" style="margin-top:8px;padding:8px;background:#f8fafc;border-radius:6px">Example: <em>Welcome Pickups</em> = Client only. <em>Rome Limo Transfer</em> = Client + Supplier.</p>
+<div class="fgroup mt8"><label class="fl">Notes</label><textarea id="f-note">${c.note||''}</textarea></div>
+<div class="mf"><button class="btn btn-sec" onclick="closeM()">Cancel</button><button class="btn btn-pr" onclick="saveContact('${id||''}')">Save</button></div>`);
+}
+function saveContact(id){
+  const name=g('f-name').trim();if(!name)return alert('Name required.');
+  const is_client=document.getElementById('f-iscl').checked;
+  const is_supplier=document.getElementById('f-issu').checked;
+  if(!is_client&&!is_supplier)return alert('Select at least one role.');
+  const obj={name,piva:g('f-piva'),tel:g('f-tel'),email:g('f-email'),note:g('f-note'),is_client,is_supplier,createdAt:DATA.contacts.find(x=>x.id===id)?.createdAt||Date.now()};
+  (id?db.collection('contacts').doc(id):db.collection('contacts').doc()).set(obj).then(closeM).catch(()=>alert('Error.'));
+}
+
+// ── RIDES ──────────────────────────────────────────
+function rRides(){
+  const list=DATA.rides.filter(r=>inF(r.date)).sort((a,b)=>b.date>a.date?1:-1);
+  const totEarned=list.reduce((s,r)=>s+rideEarned(r),0);
+  const viewToggle=`<div style="display:flex;gap:4px">
+    <button class="btn btn-sm ${ridesView==='list'?'btn-pr':'btn-sec'}" onclick="ridesView='list';render()">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg> List</button>
+    <button class="btn btn-sm ${ridesView==='calendar'?'btn-pr':'btn-sec'}" onclick="ridesView='calendar';render()">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Calendar</button>
+    <button class="btn btn-pr btn-sm" onclick="editRide()">+ Add ride</button>
+  </div>`;
+
+  const header=`<div class="filters">${fsel()}</div>
+<div class="card">
+<div class="ch">
+  <span class="ct">Rides — ${MONTHS[fM]} ${fY} &nbsp;<span class="mu fs12">${list.length} total · ${eu(totEarned)} net earned</span></span>
+  ${viewToggle}
+</div>`;
+
+  if(ridesView==='calendar') return header+buildCalendar(list)+`</div>`;
+
+  return header+`
+${list.length===0?`<div class="empty"><div class="empty-t">No rides this period</div></div>`:`
+<div class="tw"><table>
+<thead><tr><th>Date</th><th>Time</th><th>Route</th><th>Client</th><th>Supplier</th><th>Price</th><th>CT Earns</th><th>Method</th><th>Type</th><th>Passenger</th><th>Notes</th><th></th></tr></thead>
+<tbody>${list.map(r=>{
+  const earned=rideEarned(r);
+  const isV=r.method==='Voucher (settle later)';
+  const isI=r.is_intermediate;
+  const eCell=isI?`<span class="fw6 tok">${eu(earned)}</span><span class="mu fs11"> net</span>`:r.supplier_id!=='CT'?`<span class="mu fs12">—</span>`:isV?`<span class="fw6 twarn">${eu(earned)}</span><span class="mu fs11"> pend.</span>`:`<span class="fw6 tok">${eu(earned)}</span>`;
+  const typeCell=isI?`<span class="badge b-or">Intermediate</span>`:r.supplier_id==='CT'?`<span class="badge b-g">CT drives</span>`:`<span class="badge b-pu">Outsourced</span>`;
+  return`<tr>
+  <td class="fs12">${r.date}</td>
+  <td class="fw6 fs12">${r.pickup_time||'—'}</td>
+  <td style="max-width:130px;overflow:hidden;text-overflow:ellipsis">${r.da||''}${r.a?' → '+r.a:''}</td>
+  <td><span class="badge b-b fs11">${cN(r.client_id)}</span></td>
+  <td><span class="badge b-pu fs11">${isI?cN(r.sub_supplier_id||''):cN(r.supplier_id)}</span></td>
+  <td class="fw6">${eu(r.price)}${isI?`<br><span class="mu fs11">→ pay ${eu(r.sub_price)}</span>`:''}</td>
+  <td>${eCell}</td>
+  <td>${bm(r.method)}${isI&&r.sub_method?`<br>${bm(r.sub_method)}`:''}</td>
+  <td>${typeCell}</td>
+  <td class="fs12">${r.passenger||'—'}</td>
+  <td class="mu fs12" style="max-width:80px;overflow:hidden;text-overflow:ellipsis">${r.note||''}</td>
+  <td style="display:flex;gap:3px"><button class="btn-ed" onclick="editRide('${r.id}')">edit</button><button class="btn-gh" onclick="del('rides','${r.id}')">✕</button></td>
+  </tr>`;}).join('')}</tbody></table></div>`}
+</div>`;
+}
+
+function buildCalendar(rides){
+  const year=fY, month=fM;
+  const firstDay=new Date(year,month,1).getDay();
+  const daysInMonth=new Date(year,month+1,0).getDate();
+  const daysInPrev=new Date(year,month,0).getDate();
+  const todayStr=today();
+  const byDay={};
+  rides.forEach(r=>{if(r.date)byDay[r.date]=(byDay[r.date]||[]).concat(r);});
+  const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const startOffset=(firstDay+6)%7;
+  let cells='';
+  for(let i=startOffset-1;i>=0;i--){
+    cells+=`<div class="cal-cell other-month"><div class="cal-num">${daysInPrev-i}</div></div>`;
+  }
+  for(let d=1;d<=daysInMonth;d++){
+    const ds=`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isToday=ds===todayStr;
+    const dayRides=byDay[ds]||[];
+    const max=3;
+    const dotHtml=dayRides.slice(0,max).map(r=>{
+      const isV=r.method==='Voucher (settle later)';
+      const cls=r.method==='Cash'?'cash':r.method==='Card'?'card':isV?'voucher':'other';
+      const time=r.pickup_time?r.pickup_time+' ':'';
+      const label=r.da?(r.da.split(' ').slice(0,2).join(' ')+(r.a?' →':'')):cN(r.client_id);
+      return`<div class="cal-ride ${cls}">${time}${label}</div>`;
+    }).join('');
+    const more=dayRides.length>max?`<div class="cal-more">+${dayRides.length-max} more</div>`:'';
+    cells+=`<div class="cal-cell${isToday?' today':''}" onclick="openDayPanel('${ds}')" title="Click to see ${dayRides.length} ride${dayRides.length!==1?'s':''}">
+      <div class="cal-num">${d}</div>
+      ${dotHtml}${more}
+    </div>`;
+  }
+  const totalCells=startOffset+daysInMonth;
+  const remaining=(7-totalCells%7)%7;
+  for(let i=1;i<=remaining;i++) cells+=`<div class="cal-cell other-month"><div class="cal-num">${i}</div></div>`;
+  return`<div class="cal-grid" id="cal-grid">
+  ${days.map(d=>`<div class="cal-day-hdr">${d}</div>`).join('')}
+  ${cells}
+</div>
+<div style="display:flex;gap:12px;margin-top:10px;font-size:11px;flex-wrap:wrap;align-items:center">
+  <span><span style="display:inline-block;width:10px;height:10px;background:#dcfce7;border-radius:2px;margin-right:4px"></span>Cash</span>
+  <span><span style="display:inline-block;width:10px;height:10px;background:#dbeafe;border-radius:2px;margin-right:4px"></span>Card</span>
+  <span><span style="display:inline-block;width:10px;height:10px;background:#fef3c7;border-radius:2px;margin-right:4px"></span>Voucher</span>
+  <span><span style="display:inline-block;width:10px;height:10px;background:#f1f5f9;border-radius:2px;margin-right:4px"></span>Other</span>
+  <span class="mu" style="margin-left:8px">Click a day to see rides</span>
+</div>
+<div id="day-panel"></div>`;
+}
+
+function openDayPanel(ds){
+  // Highlight selected day
+  document.querySelectorAll('.cal-cell').forEach(el=>el.style.outline='');
+  document.querySelectorAll('.cal-cell').forEach(el=>{
+    if(el.getAttribute('onclick')&&el.getAttribute('onclick').includes(ds))
+      el.style.outline='2px solid var(--pr)';
+  });
+  const dayRides=DATA.rides.filter(r=>r.date===ds).sort((a,b)=>(a.pickup_time||'99:99')>(b.pickup_time||'99:99')?1:-1);
+  const dateObj=new Date(ds+'T12:00:00');
+  const label=dateObj.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  const totEarned=dayRides.reduce((s,r)=>s+rideEarned(r),0);
+  const METH_COLOR={Cash:'b-g',Card:'b-b','Bank transfer':'b-pu','Voucher (settle later)':'b-a','PayPal / Stripe':'b-te'};
+
+  let ridesHtml=dayRides.length===0
+    ?`<div style="padding:20px 16px;color:var(--mu);font-size:13px">No rides on this day.</div>`
+    :dayRides.map(r=>{
+      const isV=r.method==='Voucher (settle later)';
+      const earned=rideEarned(r);
+      const earnCls=earned>0?'tok':earned<0?'terr':'mu';
+      const earnStr=isV?`<span class="twarn fw6">${eu(earned)} pend.</span>`:`<span class="${earnCls} fw6">${eu(earned)}</span>`;
+      return`<div class="day-ride-row">
+        <div class="day-ride-time">${r.pickup_time||'—'}</div>
+        <div style="flex:1;min-width:0">
+          <div class="day-ride-route fw6">${r.da||''}${r.a?' → '+r.a:''}</div>
+          <div style="display:flex;gap:6px;margin-top:3px;flex-wrap:wrap;align-items:center">
+            <span class="badge b-b" style="font-size:10px">${cN(r.client_id)}</span>
+            <span class="badge ${METH_COLOR[r.method]||'b-gr'}" style="font-size:10px">${r.method}</span>
+            ${r.passenger?`<span class="day-ride-pax">${r.passenger}</span>`:''}
+          </div>
+        </div>
+        <div style="text-align:right;margin-right:8px">
+          <div class="fw6 fs13">${eu(r.price)}</div>
+          <div style="font-size:11px">${earnStr}</div>
+        </div>
+        <button class="btn btn-pr btn-sm" onclick="editRide('${r.id}')">Edit</button>
+      </div>`;
+    }).join('');
+
+  document.getElementById('day-panel').innerHTML=`<div class="day-panel">
+    <div class="day-panel-head">
+      <div>
+        <div class="day-panel-title">${label}</div>
+        <div class="mu fs12">${dayRides.length} ride${dayRides.length!==1?'s':''} · ${eu(totEarned)} net earned</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-pr btn-sm" onclick="editRideOnDate('${ds}')">+ Add ride this day</button>
+        <button class="btn btn-sec btn-sm" onclick="document.getElementById('day-panel').innerHTML='';document.querySelectorAll('.cal-cell').forEach(el=>el.style.outline='')">✕ Close</button>
+      </div>
+    </div>
+    ${ridesHtml}
+  </div>`;
+  // Scroll to panel
+  setTimeout(()=>document.getElementById('day-panel').scrollIntoView({behavior:'smooth',block:'nearest'}),50);
+}
+
+function editRideOnDate(ds){
+  // Pre-fill date when adding from calendar day
+  editRide();
+  setTimeout(()=>{const f=document.getElementById('f-date');if(f)f.value=ds;},50);
+}
+
+
+// ── ADD / EDIT RIDE ────────────────────────────────
+function editRide(id){
+  const r=DATA.rides.find(x=>x.id===id)||{date:today(),client_id:'CT',supplier_id:'CT',method:'Cash',commission:0,is_intermediate:false};
+  const cOpts=`<option value="CT"${r.client_id==='CT'?' selected':''}>Ciao Transfer (direct)</option>`
+    +DATA.contacts.filter(c=>c.is_client).map(c=>`<option value="${c.id}"${r.client_id===c.id?' selected':''}>${c.name}</option>`).join('');
+  const sOpts=`<option value="CT"${(!r.supplier_id||r.supplier_id==='CT')?' selected':''}>Ciao Transfer (we drive)</option>`
+    +DATA.contacts.filter(c=>c.is_supplier).map(c=>`<option value="${c.id}"${r.supplier_id===c.id?' selected':''}>${c.name}</option>`).join('');
+  const ssOpts=DATA.contacts.filter(c=>c.is_supplier).map(c=>`<option value="${c.id}"${r.sub_supplier_id===c.id?' selected':''}>${c.name}</option>`).join('');
+  const dOpts=DATA.drivers.map(a=>`<option value="${a.id}"${r.driver_id===a.id?' selected':''}>${a.name}</option>`).join('');
+  const isI=r.is_intermediate||false;
+  showM(`<div class="mh">${id?'Edit':'Add'} ride</div>
+
+<label class="chk" style="margin-bottom:12px;padding:10px;background:#fff7ed;border-radius:8px;border:1px solid #fed7aa">
+  <input type="checkbox" id="f-inter" onchange="updSummary()" ${isI?'checked':''}>
+  <span><strong>Intermediate ride</strong> — CT receives from one contact and passes to another (CT is the middleman)</span>
+</label>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:11px">
+  <div class="fgroup">
+    <label class="fl">Client (who sends the ride to CT) *</label>
+    <select id="f-client" onchange="updSummary()">${cOpts}</select>
+    <span class="mu fs11" style="margin-top:2px">Agency or partner who orders this ride</span>
+  </div>
+  <div class="fgroup" id="f-supplier-grp">
+    <label class="fl">Supplier (who drives) *</label>
+    <select id="f-supplier" onchange="updSummary()">${sOpts}</select>
+    <span class="mu fs11" style="margin-top:2px">CT if we drive, or collaborator if we outsource</span>
+  </div>
+</div>
+
+<div class="fg">
+  <div class="fgroup"><label class="fl">Date *</label><input type="date" id="f-date" value="${r.date||today()}" oninput="updSummary()"></div>
+  <div class="fgroup"><label class="fl">Pickup time</label><input type="time" id="f-time" value="${r.pickup_time||''}"></div>
+  <div class="fgroup"><label class="fl">Price received (€) *</label><input type="number" id="f-price" min="0" step="0.01" value="${r.price||''}" placeholder="0.00" oninput="updSummary()"></div>
+  <div class="fgroup"><label class="fl">Payment method (from client)</label><select id="f-method" onchange="updSummary()">${METHODS.map(m=>`<option${r.method===m?' selected':''}>${m}</option>`).join('')}</select></div>
+  <div class="fgroup" id="comm-grp">
+    <label class="fl">Commission to client (€)</label>
+    <input type="number" id="f-comm" min="0" step="0.01" value="${r.commission||0}" placeholder="0.00" oninput="updSummary()">
+    <span class="mu fs11" style="margin-top:2px">CT pays back to client</span>
+  </div>
+</div>
+
+<div id="inter-section" style="display:${isI?'block':'none'}">
+  <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px;margin:10px 0">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#9a3412;margin-bottom:10px">Intermediate: CT passes ride to sub-supplier</div>
+    <div class="fg">
+      <div class="fgroup">
+        <label class="fl">Sub-supplier (who actually drives) *</label>
+        <select id="f-ss" onchange="updSummary()"><option value="">— select —</option>${ssOpts}</select>
+      </div>
+      <div class="fgroup">
+        <label class="fl">Price paid to sub-supplier (€)</label>
+        <input type="number" id="f-sub-price" min="0" step="0.01" value="${r.sub_price||''}" placeholder="0.00" oninput="updSummary()">
+      </div>
+      <div class="fgroup">
+        <label class="fl">Payment to sub-supplier</label>
+        <select id="f-sub-method" onchange="updSummary()">${METHODS.map(m=>`<option${r.sub_method===m?' selected':''}>${m}</option>`).join('')}</select>
+      </div>
+      <div class="fgroup" id="sub-comm-grp">
+        <label class="fl">Commission sub-supplier owes CT (€)</label>
+        <input type="number" id="f-sub-comm" min="0" step="0.01" value="${r.sub_commission||0}" placeholder="0.00" oninput="updSummary()">
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="ride-sum" style="display:none"></div>
+<div class="sep"></div>
+<div class="fg">
+  <div class="fgroup"><label class="fl">From</label><input type="text" id="f-da" value="${r.da||''}" placeholder="e.g. FCO Terminal 3"></div>
+  <div class="fgroup"><label class="fl">To</label><input type="text" id="f-a" value="${r.a||''}" placeholder="e.g. Hotel Eden, Rome"></div>
+  <div class="fgroup"><label class="fl">Vehicle</label><select id="f-veh">${VEHICLES.map(v=>`<option${r.vehicle===v?' selected':''}>${v}</option>`).join('')}</select></div>
+  <div class="fgroup"><label class="fl">Driver</label><select id="f-drv"><option value="">—</option>${dOpts}</select></div>
+</div>
+<div class="fg mt8">
+  <div class="fgroup"><label class="fl">Passenger name</label><input type="text" id="f-pax" value="${r.passenger||''}"></div>
+  <div class="fgroup"><label class="fl">Notes</label><input type="text" id="f-note" value="${r.note||''}"></div>
+</div>
+<div class="mf"><button class="btn btn-sec" onclick="closeM()">Cancel</button><button class="btn btn-pr" onclick="saveRide('${id||''}')">Save ride</button></div>`,true);
+  updSummary();
+}
+
+function updSummary(){
+  const isI=document.getElementById('f-inter')?.checked||false;
+  const cid=g('f-client'), sid=g('f-supplier');
+  const price=parseFloat(g('f-price'))||0;
+  const method=g('f-method');
+  const comm=parseFloat(g('f-comm'))||0;
+  const isV=method==='Voucher (settle later)';
+  const subPrice=parseFloat(g('f-sub-price'))||0;
+  const subMethod=g('f-sub-method');
+  const subComm=parseFloat(g('f-sub-comm'))||0;
+  const isSubV=subMethod==='Voucher (settle later)';
+  const ssid=g('f-ss');
+  const el=document.getElementById('ride-sum');
+  const cg=document.getElementById('comm-grp');
+  const interSec=document.getElementById('inter-section');
+  const sSec=document.getElementById('f-supplier-grp');
+  const subCg=document.getElementById('sub-comm-grp');
+  if(cg)cg.style.display=isV?'none':'flex';
+  if(interSec)interSec.style.display=isI?'block':'none';
+  if(sSec)sSec.style.display=isI?'none':'flex';
+  if(subCg)subCg.style.display=isSubV?'none':'flex';
+  if(!el)return;
+  if(!price){el.style.display='none';return;}
+  const cn=cid==='CT'?'Ciao Transfer':cN(cid);
+  const sn=ssid?cN(ssid):(sid==='CT'?'Ciao Transfer':cN(sid));
+  let earned=0;
+  if(isI) earned=price-(isV?0:comm)-subPrice;
+  else earned=sid==='CT'?price-(isV?0:comm):0;
+  let rows=`<div class="sr"><span>Client</span><span class="badge b-b">${cn}</span></div>`;
+  rows+=`<div class="sr"><span>${isI?'Sub-supplier (actual driver)':'Supplier'}</span><span class="badge b-pu">${sn}</span></div>`;
+  rows+=`<div class="sr"><span>Price received from client</span><span class="fw6">${eu(price)}</span></div>`;
+  if(!isV&&comm>0)rows+=`<div class="sr"><span>Commission owed to ${cn}</span><span class="twarn fw6">− ${eu(comm)}</span></div>`;
+  if(isV)rows+=`<div class="sr"><span>Client payment</span><span class="badge b-a">Voucher — bank transfer</span></div>`;
+  if(isI&&subPrice>0){
+    rows+=`<div class="sr"><span>Price paid to ${sn}</span><span class="terr fw6">− ${eu(subPrice)}</span></div>`;
+    if(isSubV)rows+=`<div class="sr"><span>Sub-supplier payment</span><span class="badge b-a">Voucher — bank transfer</span></div>`;
+    if(!isSubV&&subComm>0)rows+=`<div class="sr"><span>Sub-supplier commission to CT</span><span class="tok fw6">+ ${eu(subComm)}</span></div>`;
+  }
+  rows+=`<div class="sr"><span>CT net earnings</span><span class="tok fw6">${eu(earned)}${isV?' (incl. pending)':''}</span></div>`;
+  el.style.display='block';
+  el.className='ride-summary'+(isV||isSubV?' warn':'');
+  el.innerHTML=rows;
+}
+
+function saveRide(id){
+  const date=g('f-date'), price=g('f-price');
+  const client_id=g('f-client'), supplier_id=g('f-supplier');
+  const isI=document.getElementById('f-inter')?.checked||false;
+  if(!date||!price)return alert('Date and price required.');
+  if(!client_id)return alert('Client is required.');
+  if(isI&&!g('f-ss'))return alert('Sub-supplier is required for intermediate rides.');
+  if(!isI&&!supplier_id)return alert('Supplier is required.');
+  const obj={date, price:+price, client_id,
+    supplier_id:isI?'CT':supplier_id,
+    is_intermediate:isI,
+    pickup_time:g('f-time')||null,
+    method:document.getElementById('f-method').value,
+    commission:+(document.getElementById('f-comm')?.value)||0,
+    sub_supplier_id:isI?(g('f-ss')||null):null,
+    sub_price:isI?(+(document.getElementById('f-sub-price')?.value)||0):null,
+    sub_method:isI?(document.getElementById('f-sub-method')?.value||null):null,
+    sub_commission:isI?(+(document.getElementById('f-sub-comm')?.value)||0):null,
+    da:g('f-da'), a:g('f-a'),
+    vehicle:document.getElementById('f-veh').value,
+    driver_id:document.getElementById('f-drv').value||null,
+    passenger:g('f-pax'), note:g('f-note'),
+    createdAt:DATA.rides.find(x=>x.id===id)?.createdAt||Date.now()};
+  (id?db.collection('rides').doc(id):db.collection('rides').doc()).set(obj).then(closeM).catch(()=>alert('Error saving ride.'));
+}
+
+
+// ── EXPENSES ───────────────────────────────────────
+function rExpenses(){
+  const list=DATA.expenses.filter(s=>inF(s.date)).sort((a,b)=>b.date>a.date?1:-1);
+  // Intermediate rides: sub_price is an automatic expense (paid to sub-supplier)
+  const interRides=DATA.rides.filter(r=>inF(r.date)&&r.is_intermediate&&+r.sub_price>0);
+  const tot=list.reduce((s,x)=>s+ +x.amount,0);
+  const totInter=interRides.reduce((s,r)=>s+ +r.sub_price,0);
+  const grandTot=tot+totInter;
+  return`<div class="filters">${fsel()}</div>
+<div class="card">
+<div class="ch"><span class="ct">Expenses — ${MONTHS[fM]} ${fY} &nbsp;<span class="mu fs12">${grandTot>0?eu(grandTot)+' total':''}${totInter>0?' (incl. '+eu(totInter)+' sub-supplier payments)':'' }</span></span><button class="btn btn-pr btn-sm" onclick="editExpense()">+ Add expense</button></div>
+${list.length===0&&interRides.length===0?`<div class="empty"><div class="empty-t">No expenses this period</div></div>`:`
+<div class="tw"><table>
+<thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Amount</th><th>Notes</th><th></th></tr></thead>
+<tbody>
+${interRides.sort((a,b)=>b.date>a.date?1:-1).map(r=>`<tr style="background:#fff7ed">
+<td class="fs12">${r.date}</td>
+<td><span class="badge b-or">Sub-supplier payment</span></td>
+<td>Paid to ${cN(r.sub_supplier_id)}${r.da?' — '+r.da+(r.a?' → '+r.a:''):''}${r.pickup_time?' @ '+r.pickup_time:''}${r.passenger?' ('+r.passenger+')':''}</td>
+<td class="fw6 terr">${eu(r.sub_price)}</td>
+<td class="mu fs12">${r.sub_method||''} ${r.note?'· '+r.note:''}</td>
+<td><span class="mu fs11">auto</span></td>
+</tr>`).join('')}
+${list.map(s=>`<tr>
+<td class="fs12">${s.date}</td><td><span class="badge b-r">${s.cat}</span></td><td>${s.desc||'—'}</td>
+<td class="fw6 terr">${eu(s.amount)}</td><td class="mu fs12">${s.note||''}</td>
+<td><button class="btn-gh" onclick="del('expenses','${s.id}')">✕</button></td>
+</tr>`).join('')}
+</tbody></table></div>`}
+</div>`;
+}
+function editExpense(){
+  showM(`<div class="mh">New expense</div>
+<div class="fg">
+  <div class="fgroup"><label class="fl">Date *</label><input type="date" id="f-date" value="${today()}"></div>
+  <div class="fgroup"><label class="fl">Category</label><select id="f-cat">${EXP_CATS.map(c=>`<option>${c}</option>`).join('')}</select></div>
+  <div class="fgroup"><label class="fl">Amount (€) *</label><input type="number" id="f-amt" min="0" step="0.01" placeholder="0.00"></div>
+  <div class="fgroup"><label class="fl">Description</label><input type="text" id="f-desc" placeholder="e.g. Fuel A1 Roma Nord"></div>
+</div>
+<div class="fgroup mt8"><label class="fl">Notes</label><textarea id="f-note" rows="2"></textarea></div>
+<div class="mf"><button class="btn btn-sec" onclick="closeM()">Cancel</button><button class="btn btn-pr" onclick="saveExpense()">Save</button></div>`);
+}
+function saveExpense(){
+  const date=g('f-date'),amount=g('f-amt');
+  if(!date||!amount)return alert('Date and amount required.');
+  db.collection('expenses').doc().set({date,amount:+amount,cat:document.getElementById('f-cat').value,desc:g('f-desc'),note:g('f-note'),createdAt:Date.now()}).then(closeM).catch(()=>alert('Error.'));
+}
+
+// ── STATISTICS ─────────────────────────────────────
+function rStats(){
+  const rides=DATA.rides.filter(r=>inF(r.date));
+  const exps=DATA.expenses.filter(s=>inF(s.date));
+  const mn=MONTHS[fM];
+  const totEarned=rides.reduce((s,r)=>s+rideEarned(r),0);
+  const totCash=rides.reduce((s,r)=>s+rideCashCollected(r),0);
+  const totCard=rides.reduce((s,r)=>s+rideCardCollected(r),0);
+  const totVoucher=rides.reduce((s,r)=>s+rideVoucherPending(r),0);
+  const interSubExp=rides.filter(r=>r.is_intermediate&&+r.sub_price>0).reduce((s,r)=>s+ +r.sub_price,0);
+  const totExp=exps.reduce((s,x)=>s+ +x.amount,0)+interSubExp;
+  const netProfit=totEarned-totExp;
+  const totCommOwed=rides.filter(r=>r.supplier_id==='CT').reduce((s,r)=>s+(+r.commission||0),0);
+
+  // By source (client)
+  const byClient={};
+  rides.filter(r=>r.supplier_id==='CT').forEach(r=>{const k=cN(r.client_id);byClient[k]=(byClient[k]||0)+rideEarned(r);});
+  // By method
+  const byMeth={};
+  rides.filter(r=>r.supplier_id==='CT'&&r.method!=='Voucher (settle later)').forEach(r=>{byMeth[r.method]=(byMeth[r.method]||0)+ +r.price;});
+  if(totVoucher>0)byMeth['Voucher (pending)']=(byMeth['Voucher (pending)']||0)+totVoucher;
+  // By expense category
+  const byExp={};
+  exps.forEach(s=>{byExp[s.cat]=(byExp[s.cat]||0)+ +s.amount});
+  rides.filter(r=>r.is_intermediate&&+r.sub_price>0).forEach(r=>{byExp['Sub-supplier payments']=(byExp['Sub-supplier payments']||0)+ +r.sub_price;});
+  // Monthly
+  const monthly=[];
+  for(let i=11;i>=0;i--){
+    const d=new Date(fY,fM-i,1);const mm=d.getMonth(),yy=d.getFullYear();
+    const ii=DATA.rides.filter(r=>{const dd=new Date(r.date);return dd.getMonth()===mm&&dd.getFullYear()===yy}).reduce((s,r)=>s+rideEarned(r),0);
+    const ss=DATA.expenses.filter(r=>{const dd=new Date(r.date);return dd.getMonth()===mm&&dd.getFullYear()===yy}).reduce((s,r)=>s+ +r.amount,0);
+    monthly.push({lbl:MONTHS[mm].slice(0,3)+' '+String(yy).slice(2),ii,ss});
+  }
+  const maxI=Math.max(...monthly.map(x=>x.ii),1);
+  const mChart=monthly.map(x=>`<div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1;min-width:0">
+<div style="font-size:9px;color:var(--tx);font-weight:600">${x.ii?'€'+Math.round(x.ii):''}</div>
+<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;width:100%">
+<div style="background:var(--ok);border-radius:2px 2px 0 0;width:100%;height:${x.ii?Math.max(Math.round(x.ii/maxI*110),3):0}px"></div>
+</div><div style="font-size:9px;color:var(--mu);white-space:nowrap">${x.lbl}</div></div>`).join('');
+
+  return`<div class="filters">${fsel()}</div>
+
+<div class="stat-grid">
+  <div class="sc g"><div class="sc-lbl">Total earned ${mn}</div><div class="sc-val">${eu(totEarned)}</div><div class="sc-sub">${rides.length} rides · incl. vouchers</div></div>
+  <div class="sc r"><div class="sc-lbl">Expenses ${mn}</div><div class="sc-val">${eu(totExp)}</div></div>
+  <div class="sc ${netProfit>=0?'g':'r'}"><div class="sc-lbl">Net profit</div><div class="sc-val">${eu(netProfit)}</div></div>
+  <div class="sc a"><div class="sc-lbl">Commission owed to clients</div><div class="sc-val">${eu(totCommOwed)}</div></div>
+</div>
+
+<div class="two">
+  <div class="card">
+    <div class="ch"><span class="ct">Cash &amp; card breakdown — ${mn}</span></div>
+    <div class="info-row"><span>Cash collected (gross)</span><span class="fw6 tok">${eu(totCash)}</span></div>
+    <div class="info-row"><span>Card collected (gross)</span><span class="fw6 tpr">${eu(totCard)}</span></div>
+    <div class="info-row"><span>Vouchers pending (bank transfer)</span><span class="fw6 twarn">${eu(totVoucher)}</span></div>
+    <div class="info-row"><span>Commissions owed to clients</span><span class="fw6 terr">− ${eu(totCommOwed)}</span></div>
+    <div class="info-row" style="border-top:2px solid var(--bd);margin-top:4px;padding-top:10px"><span class="fw6">Net earned (all sources)</span><span class="fw6 tok" style="font-size:15px">${eu(totEarned)}</span></div>
+  </div>
+  <div class="card">
+    <div class="ch"><span class="ct">Earnings by source — ${mn}</span></div>
+    ${barchart(byClient,'te')}
+    <div class="sep"></div>
+    <div class="info-row mu fs12"><span>Go to Statements for full contact detail</span><button class="btn btn-sec btn-sm" onclick="go('statements')">Open Statements →</button></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="ch"><span class="ct">Revenue trend — last 12 months</span></div>
+  <div style="display:flex;align-items:flex-end;gap:4px;height:130px">${mChart}</div>
+</div>
+
+<div class="two">
+  <div class="card"><div class="ch"><span class="ct">By payment method</span></div>${barchart(byMeth)}</div>
+  <div class="card"><div class="ch"><span class="ct">Expenses by category</span></div>${barchart(byExp,'r')}</div>
+</div>`;
+}
+
+// ── STATEMENTS (Contact detail + mark as paid) ──────
+function resetStmtPeriod(){
+  const d=new Date();
+  stmtFrom=new Date(d.getFullYear(),d.getMonth(),1).toISOString().slice(0,10);
+  stmtTo=new Date().toISOString().slice(0,10);
+  const f=document.getElementById('stmt-from');
+  const t=document.getElementById('stmt-to');
+  if(f)f.value=stmtFrom;
+  if(t)t.value=stmtTo;
+  document.getElementById('stmt-content').innerHTML=buildStmtHTML();
+}
+function rStatements(){
+  // Build list of contacts involved in rides
+  const contactList=DATA.contacts;
+
+  const stmtSel=`<select id="stmt-contact" onchange="stmtContact=this.value;document.getElementById('stmt-content').innerHTML=buildStmtHTML()">
+    <option value="">— select a contact —</option>
+    ${contactList.map(c=>`<option value="${c.id}"${stmtContact===c.id?' selected':''}>${c.name}</option>`).join('')}
+  </select>`;
+
+    // Date range defaults
+  const _d=new Date();
+  if(!stmtFrom) stmtFrom=new Date(_d.getFullYear(),_d.getMonth(),1).toISOString().slice(0,10);
+  if(!stmtTo)   stmtTo=new Date().toISOString().slice(0,10);
+
+  return`<div class="card">
+<div class="ch"><span class="ct">Contact Statement</span></div>
+<div class="filters" style="margin-bottom:16px;flex-wrap:wrap">
+  <span class="flbl">Contact:</span>${stmtSel}
+  <span class="flbl">From:</span>
+  <input type="date" id="stmt-from" value="${stmtFrom}" style="width:140px" onchange="stmtFrom=this.value;document.getElementById('stmt-content').innerHTML=buildStmtHTML()">
+  <span class="flbl">To:</span>
+  <input type="date" id="stmt-to" value="${stmtTo}" style="width:140px" onchange="stmtTo=this.value;document.getElementById('stmt-content').innerHTML=buildStmtHTML()">
+  <button class="btn btn-sec btn-sm" onclick="resetStmtPeriod()">This month</button>
+</div>
+</div>
+<div id="stmt-content">${buildStmtHTML()}</div>`;
+}
+
+function buildStmtHTML(){
+  if(!stmtContact)return`<div class="empty"><div class="empty-t">Select a contact above</div><div class="mu fs12">All contacts are listed — choose one to see rides, payments and balance for the selected period</div></div>`;
+  const contact=DATA.contacts.find(x=>x.id===stmtContact);
+  if(!contact)return'';
+  const S=buildStatement(stmtContact,stmtFrom,stmtTo);
+  const mn=(stmtFrom||'')+(stmtTo&&stmtTo!==stmtFrom?' → '+stmtTo:'');
+
+  // Group rides by direction
+  const ctDrives=S.rides.filter(r=>(r.supplier_id==='CT'&&r.client_id===stmtContact)||(r.is_intermediate&&r.client_id===stmtContact));
+  const theyDrive=S.rides.filter(r=>(r.supplier_id===stmtContact&&r.client_id==='CT')||(r.is_intermediate&&r.sub_supplier_id===stmtContact));
+  const mixed=S.rides.filter(r=>r.client_id!=='CT'&&r.supplier_id!=='CT'&&!r.is_intermediate);
+
+  function rideRow(r, forContactId){
+    const isV=r.method==='Voucher (settle later)';
+    const isSubV=r.is_intermediate&&r.sub_method==='Voucher (settle later)';
+    const isForSubSupplier=r.is_intermediate&&r.sub_supplier_id===forContactId;
+    const ctIsSup=r.supplier_id==='CT';
+    let effectOnCT=0;
+    if(r.is_intermediate){
+      if(r.client_id===forContactId){
+        effectOnCT=isV?+r.price:+r.price-(+r.commission||0);
+      } else if(isForSubSupplier){
+        effectOnCT=isSubV?-(+r.sub_price):-(+r.sub_price)+(+r.sub_commission||0);
+      }
+    } else {
+      effectOnCT=isV?(ctIsSup?+r.price:-r.price):(ctIsSup?(+r.price-(+r.commission||0)):-(+r.commission||0));
+    }
+    const effClass=effectOnCT>0?'tok':effectOnCT<0?'terr':'mu';
+    const timeStr=r.pickup_time?`<span class="badge b-gr" style="font-size:10px">${r.pickup_time}</span> `:'';
+    const intBadge=r.is_intermediate?`<span class="badge b-or" style="font-size:10px">intermed.</span> `:'';
+    const priceCell=isForSubSupplier?eu(r.sub_price):eu(r.price);
+    const commCell=isForSubSupplier?(+r.sub_commission>0?'− '+eu(r.sub_commission):'—'):(+r.commission>0?'− '+eu(r.commission):'—');
+    return`<div class="stmt-row">
+      <span class="fs12">${r.date}</span>
+      <span style="overflow:hidden;text-overflow:ellipsis">${timeStr}${intBadge}${r.da||''}${r.a?' → '+r.a:''} ${r.passenger?'<span class="mu fs11">('+r.passenger+')</span>':''}</span>
+      <span>${bm(isForSubSupplier?(r.sub_method||r.method):r.method,true)}</span>
+      <span class="fw6">${priceCell}</span>
+      <span class="twarn">${commCell}</span>
+      <span class="fw6 ${effClass}">${effectOnCT>0?'+':''}${eu(effectOnCT)}</span>
+      <span><button class="btn btn-gh btn-xs" onclick="del('rides','${r.id}')">✕</button></span>
+    </div>`;
+  }
+
+  let html=`<div class="stmt-box">
+<div class="stmt-head">
+  <div>
+    <div class="stmt-name">${contact.name}</div>
+    <div class="mu fs12">${mn} · ${S.rides.length} rides · ${S.payments.length} payments</div>
+  </div>
+  <button class="btn btn-pr btn-sm" onclick="editRide()">+ Add ride</button>
+</div>`;
+
+  if(ctDrives.length>0){
+    html+=`<div class="stmt-section">CT drives / receives rides for ${contact.name} (${ctDrives.length} rides)</div>
+    <div class="stmt-row" style="background:#f8fafc;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mu)">
+      <span>Date</span><span>Route / Passenger</span><span>Method</span><span>Price</span><span>Comm.</span><span>CT Effect</span><span></span>
+    </div>
+    ${ctDrives.map(r=>rideRow(r,stmtContact)).join('')}`;
+  }
+  if(theyDrive.length>0){
+    html+=`<div class="stmt-section">${contact.name} drives / handles rides for CT (${theyDrive.length} rides)</div>
+    <div class="stmt-row" style="background:#f8fafc;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mu)">
+      <span>Date</span><span>Route / Passenger</span><span>Method</span><span>Price</span><span>Comm.</span><span>CT Effect</span><span></span>
+    </div>
+    ${theyDrive.map(r=>rideRow(r,stmtContact)).join('')}`;
+  }
+
+  if(S.rides.length===0&&S.payments.length===0){html+=`<div style="padding:16px 20px;color:var(--mu);font-size:13px">No rides or payments recorded for this contact in the selected period.</div>`;}
+  // Payments in this period
+  if(S.payments.length>0){
+    html+=`<div class="stmt-section">Payments recorded this period</div>`;
+    S.payments.forEach(p=>{
+      const dir=p.direction==='contact_to_ct'?`${contact.name} → CT`:`CT → ${contact.name}`;
+      const amt=p.direction==='contact_to_ct'?`<span class="tok fw6">+ ${eu(p.amount)}</span>`:`<span class="terr fw6">− ${eu(p.amount)}</span>`;
+      html+=`<div class="stmt-row">
+        <span class="fs12">${p.date}</span>
+        <span>${dir} — ${p.note||'Settlement'}</span>
+        <span><span class="badge b-pu">${p.method||'Bank transfer'}</span></span>
+        <span>${amt}</span><span></span><span></span>
+        <span><button class="btn btn-gh btn-xs" onclick="del('payments','${p.id}')">✕</button></span>
+      </div>`;
+    });
+  }
+
+  // Summary
+  const netAmt=Math.abs(S.net);
+  const ctOwes=S.net<-0.01, contactOwes=S.net>0.01;
+  html+=`<div class="stmt-footer ${ctOwes?'owe':''}">
+    <div>
+      <div style="font-size:12px;color:var(--mu);margin-bottom:4px">
+        Vouchers they owe CT: <strong>${eu(S.voucherOwed)}</strong> &nbsp;|&nbsp;
+        Vouchers CT owes: <strong>${eu(S.voucherWePay)}</strong> &nbsp;|&nbsp;
+        Commission CT owes: <strong>${eu(S.ctCommOwed)}</strong> &nbsp;|&nbsp;
+        Commission CT earns: <strong>${eu(S.ctCommEarned)}</strong>
+        ${S.subPriceOwed>0?` &nbsp;|&nbsp; Sub-price CT owes: <strong>${eu(S.subPriceOwed)}</strong>`:''}
+      </div>
+      <div style="font-size:12px;color:var(--mu)">Already paid: received ${eu(S.paidByContact)} · paid out ${eu(S.paidByCT)}</div>
+    </div>
+    <div style="text-align:right">
+      <div class="stmt-total ${contactOwes?'tok':ctOwes?'terr':'mu'}">
+        ${contactOwes?contact.name+' owes CT '+eu(netAmt):ctOwes?'CT owes '+contact.name+' '+eu(netAmt):'All settled ✔'}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">
+        ${contactOwes?`<button class="btn btn-ok btn-sm" onclick="markPaid('${stmtContact}','contact_to_ct',${netAmt.toFixed(2)})">Mark as received from ${contact.name}</button>`:''}
+        ${ctOwes?`<button class="btn btn-warn btn-sm" onclick="markPaid('${stmtContact}','ct_to_contact',${netAmt.toFixed(2)})">Mark as paid to ${contact.name}</button>`:''}
+        <button class="btn btn-sec btn-sm" onclick="markPaid('${stmtContact}','custom',0)">Record custom payment</button>
+      </div>
+    </div>
+  </div>
+</div>`;
+  return html;
+}
+
+function markPaid(contactId,direction,amount){
+  const contact=DATA.contacts.find(x=>x.id===contactId);
+  let amt=amount;
+  if(direction==='custom'){
+    const input=prompt(`Custom payment amount (€):`);
+    if(!input)return;
+    amt=parseFloat(input);
+    if(isNaN(amt)||amt<=0)return alert('Invalid amount.');
+    direction=confirm(`Did ${contact.name} pay CT?\n\nOK = ${contact.name} paid CT\nCancel = CT paid ${contact.name}`)?'contact_to_ct':'ct_to_contact';
+  }
+  const note=prompt(`Payment note (optional):`,direction==='contact_to_ct'?`Received from ${contact.name}`:`Paid to ${contact.name}`)||'';
+  const obj={contact_id:contactId,direction,amount:+amt,method:'Bank transfer',note,date:today(),createdAt:Date.now()};
+  db.collection('payments').doc().set(obj).then(()=>{
+    document.getElementById('stmt-content').innerHTML=buildStmtHTML();
+  }).catch(()=>alert('Error.'));
+}
+
+// ── MODAL / DELETE ──────────────────────────────────
+function showM(html,wide=false){document.getElementById('mc').innerHTML=`<div class="mbg" onclick="if(event.target===this)closeM()"><div class="modal${wide?' wide':''}"><button class="mclose" onclick="closeM()">✕</button>${html}</div></div>`;}
+function closeM(){document.getElementById('mc').innerHTML='';}
+function del(col,id){if(!confirm('Delete this record?'))return;db.collection(col).doc(id).delete().catch(()=>alert('Error.'));}
+
+// ── BACKUP ──────────────────────────────────────────
+async function exportBackup(){
+  const out={company:DATA.company,drivers:DATA.drivers,contacts:DATA.contacts,rides:DATA.rides,expenses:DATA.expenses,payments:DATA.payments,exported:new Date().toISOString()};
+  const blob=new Blob([JSON.stringify(out,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`CT_backup_${today()}.json`;a.click();
+}
+async function importBackup(e){
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=async ev=>{
+    try{
+      const d=JSON.parse(ev.target.result);
+      if(!confirm('Overwrite ALL current data with this backup?'))return;
+      if(d.company)await db.collection('company').doc('info').set(d.company);
+      for(const col of['drivers','contacts','rides','expenses','payments']){
+        if(d[col]&&Array.isArray(d[col])){
+          for(const item of d[col]){const{id,...rest}=item;await db.collection(col).doc(id||db.collection(col).doc().id).set(rest);}
+        }
+      }
+      alert('Backup restored!');
+    }catch{alert('Invalid file.');}
+  };
+  r.readAsText(f);e.target.value='';
+}
+
+// ── INIT ────────────────────────────────────────────
+document.getElementById('sb-date').textContent=new Date().toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'long',year:'numeric'});
+</script>
+</body>
+</html>
