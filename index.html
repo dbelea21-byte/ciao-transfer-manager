@@ -1095,7 +1095,7 @@ function buildStmtHTML(){
   // ── Period statistics (for selected date range) ──
   const periodTheyGave=S.rides.filter(r=>r.client_id===stmtContact&&r.supplier_id==='CT');
   const periodWeGave=S.rides.filter(r=>(r.supplier_id===stmtContact&&r.client_id==='CT')||(r.is_intermediate&&r.sub_supplier_id===stmtContact));
-  const periodTheyGaveAmt=periodTheyGave.reduce((s,r)=>s+ +r.price,0);
+  const periodTheyGaveAmt=periodTheyGave.reduce((s,r)=>s+rideEarned(r),0);
   const periodWeGaveAmt=periodWeGave.reduce((s,r)=>s+(r.sub_supplier_id===stmtContact?(+r.sub_price||0):(+r.price||0)),0);
   const periodLabel=(stmtFrom&&stmtTo&&stmtFrom!==stmtTo)?`${stmtFrom} → ${stmtTo}`:(stmtFrom||'selected period');
 
@@ -1110,7 +1110,7 @@ function buildStmtHTML(){
       <div style="font-size:26px;font-weight:700;color:var(--ok);line-height:1">${periodTheyGave.length}</div>
       <div style="font-size:13px;color:var(--mu);margin-top:2px">rides</div>
       <div style="font-size:18px;font-weight:700;color:var(--ok);margin-top:8px">${eu(periodTheyGaveAmt)}</div>
-      <div style="font-size:11px;color:var(--mu)">total value received from ${contact.name}</div>
+      <div style="font-size:11px;color:var(--mu)">net earned from ${contact.name} (after commissions)</div>
     </div>
     <div style="background:#eff6ff;border-radius:8px;padding:14px 16px">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--mu);margin-bottom:8px">CT → ${contact.name} (rides sent)</div>
@@ -1132,7 +1132,7 @@ function buildStmtHTML(){
   const allPayments=DATA.payments.filter(p=>p.contact_id===stmtContact);
   const theyGaveRides=allRides.filter(r=>r.client_id===stmtContact&&r.supplier_id==='CT');
   const theyGaveCount=theyGaveRides.length;
-  const theyGaveTotal=theyGaveRides.reduce((s,r)=>s+ +r.price,0);
+  const theyGaveTotal=theyGaveRides.reduce((s,r)=>s+rideEarned(r),0);
   const weGaveRides=allRides.filter(r=>(r.supplier_id===stmtContact&&r.client_id==='CT')||(r.sub_supplier_id===stmtContact));
   const weGaveCount=weGaveRides.length;
   const weGaveTotal=weGaveRides.reduce((s,r)=>s+(r.sub_supplier_id===stmtContact?(+r.sub_price||0):(+r.price||0)),0);
@@ -1152,6 +1152,7 @@ function buildStmtHTML(){
       <div style="font-size:26px;font-weight:700;color:var(--ok)">${theyGaveCount}</div>
       <div style="font-size:12px;color:var(--mu)">rides total</div>
       <div style="font-size:18px;font-weight:700;color:var(--ok);margin-top:6px">${eu(theyGaveTotal)}</div>
+      <div style="font-size:11px;color:var(--mu)">net earned (after commissions)</div>
     </div>
     <div style="background:#eff6ff;border-radius:8px;padding:14px 16px">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--mu);margin-bottom:8px">CT gave ${contact.name}</div>
