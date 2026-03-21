@@ -324,7 +324,7 @@ function rawBalance(contactId, rides){
 function paidAmount(contactId, m, y){
   return DATA.payments
     .filter(p=>p.contact_id===contactId&&(!m||inPeriod(p.date,m,y)))
-    .reduce((s,p)=>s+(p.direction==='ct_to_contact'?-1:1)*(+p.amount),0);
+    .reduce((s,p)=>s+(p.direction==='ct_to_contact'?+1:-1)*(+p.amount),0);
 }
 
 function contactBalance(contactId){
@@ -367,7 +367,7 @@ function buildStatement(contactId, from, to){
   const paidByCT=payments.filter(p=>p.direction==='ct_to_contact').reduce((s,p)=>s+ +p.amount,0);
   // Net: positive = contact still owes CT, negative = CT still owes contact
   const gross=voucherOwed-voucherWePay-ctCommOwed+ctCommEarned;
-  const net=gross+paidByContact-paidByCT;
+  const net=gross+paidByCT-paidByContact;
   return{rides,payments,totalPrice,ctCommOwed,ctCommEarned,voucherOwed,voucherWePay,subPriceOwed,paidByContact,paidByCT,gross,net};
 }
 
@@ -1060,7 +1060,9 @@ function buildStmtHTML(){
     });
   }
 
-  // Summary
+  // ── Period balance summary ──
+  // net = rides balance in period - payments already made in period
+  // = what is still unpaid in this period
   const netAmt=Math.abs(S.net);
   const ctOwes=S.net<-0.01, contactOwes=S.net>0.01;
   html+=`<div class="stmt-footer ${ctOwes?'owe':''}">
@@ -1072,9 +1074,12 @@ function buildStmtHTML(){
         Commission CT earns: <strong>${eu(S.ctCommEarned)}</strong>
         ${S.subPriceOwed>0?` &nbsp;|&nbsp; Sub-price CT owes: <strong>${eu(S.subPriceOwed)}</strong>`:''}
       </div>
-      <div style="font-size:12px;color:var(--mu)">Already paid: received ${eu(S.paidByContact)} · paid out ${eu(S.paidByCT)}</div>
+      <div style="font-size:12px;color:var(--mu)">
+        Payments already settled this period: received ${eu(S.paidByContact)} · paid out ${eu(S.paidByCT)}
+      </div>
     </div>
     <div style="text-align:right">
+      <div style="font-size:11px;color:var(--mu);margin-bottom:4px">Remaining unpaid balance</div>
       <div class="stmt-total ${contactOwes?'tok':ctOwes?'terr':'mu'}">
         ${contactOwes?contact.name+' owes CT '+eu(netAmt):ctOwes?'CT owes '+contact.name+' '+eu(netAmt):'All settled ✔'}
       </div>
@@ -1086,6 +1091,86 @@ function buildStmtHTML(){
     </div>
   </div>
 </div>`;
+
+  // ── Period statistics (for selected date range) ──
+  const periodTheyGave=S.rides.filter(r=>r.client_id===stmtContact&&r.supplier_id==='CT');
+  const periodWeGave=S.rides.filter(r=>(r.supplier_id===stmtContact&&r.client_id==='CT')||(r.is_intermediate&&r.sub_supplier_id===stmtContact));
+  const periodTheyGaveAmt=periodTheyGave.reduce((s,r)=>s+ +r.price,0);
+  const periodWeGaveAmt=periodWeGave.reduce((s,r)=>s+(r.sub_supplier_id===stmtContact?(+r.sub_price||0):(+r.price||0)),0);
+  const periodLabel=(stmtFrom&&stmtTo&&stmtFrom!==stmtTo)?`${stmtFrom} → ${stmtTo}`:(stmtFrom||'selected period');
+
+  html+=`<div class="card" style="margin-top:10px">
+  <div class="ch" style="margin-bottom:12px">
+    <span class="ct">Period statistics</span>
+    <span class="mu fs12">${periodLabel}</span>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+    <div style="background:#f0fdf4;border-radius:8px;padding:14px 16px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--mu);margin-bottom:8px">${contact.name} → CT (rides received)</div>
+      <div style="font-size:26px;font-weight:700;color:var(--ok);line-height:1">${periodTheyGave.length}</div>
+      <div style="font-size:13px;color:var(--mu);margin-top:2px">rides</div>
+      <div style="font-size:18px;font-weight:700;color:var(--ok);margin-top:8px">${eu(periodTheyGaveAmt)}</div>
+      <div style="font-size:11px;color:var(--mu)">total value received from ${contact.name}</div>
+    </div>
+    <div style="background:#eff6ff;border-radius:8px;padding:14px 16px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--mu);margin-bottom:8px">CT → ${contact.name} (rides sent)</div>
+      <div style="font-size:26px;font-weight:700;color:var(--pr);line-height:1">${periodWeGave.length}</div>
+      <div style="font-size:13px;color:var(--mu);margin-top:2px">rides</div>
+      <div style="font-size:18px;font-weight:700;color:var(--pr);margin-top:8px">${eu(periodWeGaveAmt)}</div>
+      <div style="font-size:11px;color:var(--mu)">total value sent to ${contact.name}</div>
+    </div>
+  </div>
+  <div style="background:#f8fafc;border-radius:8px;padding:12px 14px;font-size:13px;display:flex;gap:24px;flex-wrap:wrap">
+    <span>Total rides this period: <strong>${S.rides.length}</strong></span>
+    <span>Payments settled: <strong>${S.payments.length}</strong></span>
+    <span>Net CT earned (after commissions): <strong class="tok">${eu(S.rides.filter(r=>r.supplier_id==='CT').reduce((s,r)=>s+rideEarned(r),0))}</strong></span>
+  </div>
+</div>`;
+
+  // ── All-time statistics block ──
+  const allRides=DATA.rides.filter(r=>r.client_id===stmtContact||r.supplier_id===stmtContact||r.sub_supplier_id===stmtContact);
+  const allPayments=DATA.payments.filter(p=>p.contact_id===stmtContact);
+  const theyGaveRides=allRides.filter(r=>r.client_id===stmtContact&&r.supplier_id==='CT');
+  const theyGaveCount=theyGaveRides.length;
+  const theyGaveTotal=theyGaveRides.reduce((s,r)=>s+ +r.price,0);
+  const weGaveRides=allRides.filter(r=>(r.supplier_id===stmtContact&&r.client_id==='CT')||(r.sub_supplier_id===stmtContact));
+  const weGaveCount=weGaveRides.length;
+  const weGaveTotal=weGaveRides.reduce((s,r)=>s+(r.sub_supplier_id===stmtContact?(+r.sub_price||0):(+r.price||0)),0);
+  const allTimeNet=rawBalance(stmtContact,allRides)+allPayments.reduce((s,p)=>s+(p.direction==='ct_to_contact'?+1:-1)*(+p.amount),0);
+  const allTimeNetAbs=Math.abs(allTimeNet);
+  const allTimeCls=allTimeNet>0.01?'tok':allTimeNet<-0.01?'terr':'mu';
+  const allTimeLbl=allTimeNet>0.01?`${contact.name} owes CT`:allTimeNet<-0.01?`CT owes ${contact.name}`:'All time: settled';
+
+  html+=`<div class="card" style="margin-top:10px;border-color:#e0e7ff">
+  <div class="ch" style="margin-bottom:12px">
+    <span class="ct">All-time statistics — ${contact.name}</span>
+    <span class="mu fs12">entire history, all periods</span>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+    <div style="background:#f0fdf4;border-radius:8px;padding:14px 16px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--mu);margin-bottom:8px">${contact.name} gave CT</div>
+      <div style="font-size:26px;font-weight:700;color:var(--ok)">${theyGaveCount}</div>
+      <div style="font-size:12px;color:var(--mu)">rides total</div>
+      <div style="font-size:18px;font-weight:700;color:var(--ok);margin-top:6px">${eu(theyGaveTotal)}</div>
+    </div>
+    <div style="background:#eff6ff;border-radius:8px;padding:14px 16px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--mu);margin-bottom:8px">CT gave ${contact.name}</div>
+      <div style="font-size:26px;font-weight:700;color:var(--pr)">${weGaveCount}</div>
+      <div style="font-size:12px;color:var(--mu)">rides total</div>
+      <div style="font-size:18px;font-weight:700;color:var(--pr);margin-top:6px">${eu(weGaveTotal)}</div>
+    </div>
+    <div style="background:${allTimeNet>0.01?'#f0fdf4':allTimeNet<-0.01?'#fffbeb':'#f8fafc'};border-radius:8px;padding:14px 16px">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--mu);margin-bottom:8px">Overall balance</div>
+      <div style="font-size:22px;font-weight:700" class="${allTimeCls}">${eu(allTimeNetAbs)}</div>
+      <div style="font-size:12px;color:var(--mu);margin-top:4px">${allTimeLbl}</div>
+    </div>
+  </div>
+  <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--bd);font-size:12px;color:var(--mu)">
+    Paid out to ${contact.name} (all time): <strong>${eu(allPayments.filter(p=>p.direction==='ct_to_contact').reduce((s,p)=>s+ +p.amount,0))}</strong> &nbsp;|&nbsp;
+    Received from ${contact.name} (all time): <strong>${eu(allPayments.filter(p=>p.direction==='contact_to_ct').reduce((s,p)=>s+ +p.amount,0))}</strong>
+  </div>
+</div>`;
+
   return html;
 }
 
