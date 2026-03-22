@@ -171,7 +171,7 @@ textarea{resize:vertical;min-height:56px}
 <div id="loading-overlay" class="loading-overlay">
   <div class="spinner"></div>
   <div style="font-size:14px;color:var(--mu)" id="loading-msg">Connecting to cloud...</div>
-  <button id="loading-skip" onclick="document.getElementById('loading-overlay').style.display='none';render()" 
+  <button id="loading-skip" onclick="forceOpen()" 
     style="display:none;margin-top:12px;padding:8px 20px;background:var(--pr);color:#fff;border:none;border-radius:7px;cursor:pointer;font-size:13px">
     Open anyway
   </button>
@@ -256,16 +256,19 @@ function chkLoad(){
     setSS('ok'); render();
   }
 }
-// Fallback: force load after 6 seconds no matter what
+// Fallback: force open after 4 seconds
+function forceOpen(){
+  Object.keys(LOADED).forEach(k=>LOADED[k]=true);
+  // Ensure DATA arrays are initialized
+  ['drivers','contacts','rides','expenses','payments'].forEach(k=>{if(!Array.isArray(DATA[k]))DATA[k]=[];});
+  if(!DATA.company||typeof DATA.company!=='object')DATA.company={};
+  document.getElementById('loading-overlay').style.display='none';
+  setSS('err');
+  render();
+}
 setTimeout(()=>{
   const overlay=document.getElementById('loading-overlay');
-  if(overlay&&overlay.style.display!=='none'){
-    overlay.style.display='none';
-    // Mark any unloaded collections as empty
-    Object.keys(LOADED).forEach(k=>{if(!LOADED[k])LOADED[k]=true;});
-    setSS('err');
-    render();
-  }
+  if(overlay&&overlay.style.display!=='none') forceOpen();
 },4000);
 function setSS(s){
   const e=document.getElementById('sync-status');if(!e)return;
