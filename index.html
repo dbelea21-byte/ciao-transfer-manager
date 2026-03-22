@@ -837,6 +837,44 @@ function updSummary(){
   el.innerHTML=rows;
 }
 
+
+// ── AUTO PARKING ────────────────────────────────────
+function isAirportPickup(da){
+  if(!da) return false;
+  const s=da.toLowerCase();
+  return s.includes('fco')||s.includes('fiumicino');
+}
+
+function autoAddParking(rideId, date){
+  // Check if parking already exists for this ride
+  const existing=DATA.expenses.find(e=>e.auto_parking&&e.ride_id===rideId);
+  if(existing) return; // already added
+  db.collection('expenses').doc().set({
+    date, amount:2, cat:'Parking',
+    desc:'FCO Airport parking — auto',
+    note:'Auto-added', auto_parking:true,
+    ride_id:rideId, createdAt:Date.now()
+  }).catch(()=>{});
+}
+
+function backfillParkingExpenses(){
+  const airportRides=DATA.rides.filter(r=>isAirportPickup(r.da));
+  let added=0;
+  airportRides.forEach(r=>{
+    const already=DATA.expenses.find(e=>e.auto_parking&&e.ride_id===r.id);
+    if(!already){
+      db.collection('expenses').doc().set({
+        date:r.date, amount:2, cat:'Parking',
+        desc:'FCO Airport parking — auto',
+        note:'Auto-added', auto_parking:true,
+        ride_id:r.id, createdAt:Date.now()
+      });
+      added++;
+    }
+  });
+  return{total:airportRides.length, added};
+}
+
 function saveRide(id){
   const date=g('f-date'), price=g('f-price');
   const client_id=g('f-client'), supplier_id=g('f-supplier');
@@ -860,7 +898,18 @@ function saveRide(id){
     driver_id:document.getElementById('f-drv').value||null,
     passenger:g('f-pax'), note:g('f-note'),
     createdAt:DATA.rides.find(x=>x.id===id)?.createdAt||Date.now()};
-  (id?db.collection('rides').doc(id):db.collection('rides').doc()).set(obj).then(closeM).catch(()=>alert('Error saving ride.'));
+  const rideRef=id?db.collection('rides').doc(id):db.collection('rides').doc();
+  rideRef.set(obj).then(()=>{
+    // Auto-add €2 parking for airport pickups
+    if(isAirportPickup(obj.da)){
+      autoAddParking(rideRef.id, obj.date);
+    } else if(id){
+      // If edited and 'from' changed away from airport, remove auto parking
+      const old=DATA.expenses.find(e=>e.auto_parking&&e.ride_id===id);
+      if(old) db.collection('expenses').doc(old.id).delete();
+    }
+    closeM();
+  }).catch(()=>alert('Error saving ride.'));
 }
 
 
@@ -905,7 +954,7 @@ function rExpenses(){
   if(Object.keys(groups).length===0){
     return`<div class="filters">${fsel()}</div>
 <div class="card">
-<div class="ch"><span class="ct">Expenses — ${MONTHS[fM]} ${fY}</span><button class="btn btn-pr btn-sm" onclick="editExpense()">+ Add expense</button></div>
+<div class="ch"><span class="ct">Expenses — ${MONTHS[fM]} ${fY}</span><div style="display:flex;gap:8px"><button class="btn btn-sec btn-sm" onclick="runBackfill()">🅿️ Sync airport parking</button><button class="btn btn-pr btn-sm" onclick="editExpense()">+ Add expense</button></div></div>
 <div class="empty"><div class="empty-t">No expenses this period</div></div>
 </div>`;
   }
@@ -952,10 +1001,21 @@ function rExpenses(){
 <div class="card">
 <div class="ch">
   <span class="ct">Expenses — ${MONTHS[fM]} ${fY} &nbsp;<span class="mu fs12">${eu(grandTot)} total · ${Object.keys(groups).length} categories</span></span>
-  <button class="btn btn-pr btn-sm" onclick="editExpense()">+ Add expense</button>
+  <div style="display:flex;gap:8px">
+    <button class="btn btn-sec btn-sm" onclick="runBackfill()" title="Scan all rides and add missing €2 parking for FCO/Fiumicino pickups">🅿️ Sync airport parking</button>
+    <button class="btn btn-pr btn-sm" onclick="editExpense()">+ Add expense</button>
+  </div>
 </div>
 </div>
 ${groupsHTML}`;
+}
+
+function runBackfill(){
+  if(!confirm('This will scan ALL your rides and add a €2 parking expense for every pickup from FCO/Fiumicino that does not already have one.\n\nMake sure you have deleted your manually added parking tickets first!\n\nContinue?')) return;
+  const result=backfillParkingExpenses();
+  setTimeout(()=>{
+    alert('Done!\n\n'+result.total+' airport pickup rides found.\n'+result.added+' new parking entries added (€'+result.added*2+').\nAlready existed: '+(result.total-result.added)+'.');
+  },500);
 }
 
 function toggleExpGroup(cat){
