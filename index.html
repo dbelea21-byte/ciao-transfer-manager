@@ -924,8 +924,9 @@ function rExpenses(){
         <span class="mu fs12">${s.note||''}</span>
         <span>${s.isAuto?'<span class="mu fs11">auto</span>':`<button class="btn-gh" onclick="event.stopPropagation();del('expenses','${s.id}')">✕</button>`}</span>
       </div>`).join('');
+    const catId=encodeURIComponent(cat);
     return`<div class="exp-group">
-      <div class="exp-group-hdr${isOpen?' open':''}" onclick="toggleExpGroup('${cat.replace(/'/g,'\\'')}')">
+      <div class="exp-group-hdr${isOpen?' open':''}" onclick="toggleExpGroup(decodeURIComponent('${catId}'))">
         <div class="exp-group-left">
           <div class="exp-group-icon">${icon}</div>
           <div>
