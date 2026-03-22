@@ -146,6 +146,24 @@ textarea{resize:vertical;min-height:56px}
 /* Statement stmt-row fix */
 .stmt-row{display:grid;grid-template-columns:75px minmax(0,1fr) 120px 80px 70px 85px 60px;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid #f8fafc;font-size:12px}
 .stmt-row:hover{background:#f8fafc}
+/* Expense accordion */
+.exp-group{border:1px solid var(--bd);border-radius:8px;margin-bottom:8px;overflow:hidden}
+.exp-group-hdr{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;cursor:pointer;background:var(--su);transition:background .12s;user-select:none}
+.exp-group-hdr:hover{background:#f8fafc}
+.exp-group-hdr.open{background:#fef9f6;border-bottom:1px solid var(--bd)}
+.exp-group-left{display:flex;align-items:center;gap:10px}
+.exp-group-icon{font-size:18px;width:32px;text-align:center}
+.exp-group-name{font-size:14px;font-weight:600}
+.exp-group-count{font-size:11px;color:var(--mu);margin-left:4px}
+.exp-group-right{display:flex;align-items:center;gap:12px}
+.exp-group-amt{font-size:16px;font-weight:700;color:var(--err)}
+.exp-group-chevron{font-size:12px;color:var(--mu);transition:transform .2s}
+.exp-group-chevron.open{transform:rotate(90deg)}
+.exp-rows{display:none}
+.exp-rows.open{display:block}
+.exp-row{display:grid;grid-template-columns:90px 1fr 80px 80px 28px;align-items:center;gap:8px;padding:9px 14px 9px 56px;border-bottom:1px solid #f8fafc;font-size:13px}
+.exp-row:last-child{border-bottom:none}
+.exp-row:hover{background:#fef9f6}
 </style>
 </head>
 <body>
@@ -212,6 +230,7 @@ let TAB='rides', fM=new Date().getMonth(), fY=new Date().getFullYear();
 let stmtContact='', stmtM=new Date().getMonth(), stmtY=new Date().getFullYear();
 let stmtFrom='', stmtTo='';
 let ridesSearch='';
+let expOpenGroups=new Set();
 let ridesView='calendar';
 let DATA={company:{},drivers:[],contacts:[],rides:[],expenses:[],payments:[]};
 let LOADED={company:false,drivers:false,contacts:false,rides:false,expenses:false,payments:false};
@@ -842,33 +861,101 @@ function saveRide(id){
 // ── EXPENSES ───────────────────────────────────────
 function rExpenses(){
   const list=DATA.expenses.filter(s=>inF(s.date)).sort((a,b)=>b.date>a.date?1:-1);
-  // Intermediate rides: sub_price is an automatic expense (paid to sub-supplier)
   const interRides=DATA.rides.filter(r=>inF(r.date)&&r.is_intermediate&&+r.sub_price>0);
   const tot=list.reduce((s,x)=>s+ +x.amount,0);
   const totInter=interRides.reduce((s,r)=>s+ +r.sub_price,0);
   const grandTot=tot+totInter;
+
+  // Category icons
+  const CAT_ICON={'Fuel':'⛽','Motorway / Tolls':'🛣️','ZTL Ticket':'🎫','Car wash':'🚿','Insurance':'🛡️',
+    'Maintenance / Mechanic':'🔧','Tyres':'🔄','Parking':'🅿️','Accountant':'📋',
+    'Software / Subscriptions':'💻','Meals / Travel':'🍽️','Other':'📦','Sub-supplier payment':'🚗'};
+
+  // Group regular expenses by category
+  const groups={};
+  list.forEach(s=>{
+    if(!groups[s.cat]) groups[s.cat]={items:[],total:0};
+    groups[s.cat].items.push(s);
+    groups[s.cat].total+= +s.amount;
+  });
+
+  // Add sub-supplier payments as a group
+  if(interRides.length>0){
+    groups['Sub-supplier payment']={
+      items:interRides.map(r=>({
+        id:'ride_'+r.id,
+        date:r.date,
+        amount:+r.sub_price,
+        desc:`Paid to ${cN(r.sub_supplier_id)}${r.da?' — '+r.da+(r.a?' → '+r.a:''):''}${r.pickup_time?' @ '+r.pickup_time:''}${r.passenger?' ('+r.passenger+')':''}`,
+        note:r.sub_method||'',
+        isAuto:true,
+        rideId:r.id
+      })),
+      total:totInter,
+      isAuto:true
+    };
+  }
+
+  if(Object.keys(groups).length===0){
+    return`<div class="filters">${fsel()}</div>
+<div class="card">
+<div class="ch"><span class="ct">Expenses — ${MONTHS[fM]} ${fY}</span><button class="btn btn-pr btn-sm" onclick="editExpense()">+ Add expense</button></div>
+<div class="empty"><div class="empty-t">No expenses this period</div></div>
+</div>`;
+  }
+
+  // Sort groups by total desc
+  const sortedCats=Object.entries(groups).sort((a,b)=>b[1].total-a[1].total);
+
+  let groupsHTML=sortedCats.map(([cat,grp])=>{
+    const isOpen=expOpenGroups.has(cat);
+    const icon=CAT_ICON[cat]||'📦';
+    const rows=grp.items.sort((a,b)=>b.date>a.date?1:-1).map(s=>`
+      <div class="exp-row">
+        <span class="mu fs12">${s.date}</span>
+        <span>${s.desc||'<span class="mu">—</span>'}</span>
+        <span class="fw6 terr">${eu(s.amount)}</span>
+        <span class="mu fs12">${s.note||''}</span>
+        <span>${s.isAuto?'<span class="mu fs11">auto</span>':`<button class="btn-gh" onclick="event.stopPropagation();del('expenses','${s.id}')">✕</button>`}</span>
+      </div>`).join('');
+    return`<div class="exp-group">
+      <div class="exp-group-hdr${isOpen?' open':''}" onclick="toggleExpGroup('${cat.replace(/'/g,'\\'')}')">
+        <div class="exp-group-left">
+          <div class="exp-group-icon">${icon}</div>
+          <div>
+            <span class="exp-group-name">${cat}</span>
+            <span class="exp-group-count">${grp.items.length} entr${grp.items.length===1?'y':'ies'}</span>
+          </div>
+        </div>
+        <div class="exp-group-right">
+          <span class="exp-group-amt">${eu(grp.total)}</span>
+          <span class="exp-group-chevron${isOpen?' open':''}">▶</span>
+        </div>
+      </div>
+      <div class="exp-rows${isOpen?' open':''}">
+        <div style="display:grid;grid-template-columns:90px 1fr 80px 80px 28px;gap:8px;padding:7px 14px 7px 56px;background:#f8fafc;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mu)">
+          <span>Date</span><span>Description</span><span>Amount</span><span>Notes</span><span></span>
+        </div>
+        ${rows}
+      </div>
+    </div>`;
+  }).join('');
+
   return`<div class="filters">${fsel()}</div>
 <div class="card">
-<div class="ch"><span class="ct">Expenses — ${MONTHS[fM]} ${fY} &nbsp;<span class="mu fs12">${grandTot>0?eu(grandTot)+' total':''}${totInter>0?' (incl. '+eu(totInter)+' sub-supplier payments)':'' }</span></span><button class="btn btn-pr btn-sm" onclick="editExpense()">+ Add expense</button></div>
-${list.length===0&&interRides.length===0?`<div class="empty"><div class="empty-t">No expenses this period</div></div>`:`
-<div class="tw"><table>
-<thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Amount</th><th>Notes</th><th></th></tr></thead>
-<tbody>
-${interRides.sort((a,b)=>b.date>a.date?1:-1).map(r=>`<tr style="background:#fff7ed">
-<td class="fs12">${r.date}</td>
-<td><span class="badge b-or">Sub-supplier payment</span></td>
-<td>Paid to ${cN(r.sub_supplier_id)}${r.da?' — '+r.da+(r.a?' → '+r.a:''):''}${r.pickup_time?' @ '+r.pickup_time:''}${r.passenger?' ('+r.passenger+')':''}</td>
-<td class="fw6 terr">${eu(r.sub_price)}</td>
-<td class="mu fs12">${r.sub_method||''} ${r.note?'· '+r.note:''}</td>
-<td><span class="mu fs11">auto</span></td>
-</tr>`).join('')}
-${list.map(s=>`<tr>
-<td class="fs12">${s.date}</td><td><span class="badge b-r">${s.cat}</span></td><td>${s.desc||'—'}</td>
-<td class="fw6 terr">${eu(s.amount)}</td><td class="mu fs12">${s.note||''}</td>
-<td><button class="btn-gh" onclick="del('expenses','${s.id}')">✕</button></td>
-</tr>`).join('')}
-</tbody></table></div>`}
-</div>`;
+<div class="ch">
+  <span class="ct">Expenses — ${MONTHS[fM]} ${fY} &nbsp;<span class="mu fs12">${eu(grandTot)} total · ${Object.keys(groups).length} categories</span></span>
+  <button class="btn btn-pr btn-sm" onclick="editExpense()">+ Add expense</button>
+</div>
+</div>
+${groupsHTML}`;
+}
+
+function toggleExpGroup(cat){
+  if(expOpenGroups.has(cat)) expOpenGroups.delete(cat);
+  else expOpenGroups.add(cat);
+  // Lightweight re-render of content only
+  document.getElementById('content').innerHTML=rExpenses();
 }
 function editExpense(){
   showM(`<div class="mh">New expense</div>
