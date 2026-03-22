@@ -530,9 +530,9 @@ function rRides(){
     <div style="position:relative;flex:1">
       <input type="text" id="rides-search" placeholder="Search rides, passengers, routes..." 
         value="${ridesSearch}"
-        oninput="ridesSearch=this.value;render()"
+        oninput="updateRidesSearch(this.value)"
         style="width:100%;padding:6px 32px 6px 11px;border:1px solid ${ridesSearch?'var(--pr)':'var(--bd)'};border-radius:7px;font-size:13px;background:var(--su);color:var(--tx)">
-      ${ridesSearch?`<button onclick="ridesSearch='';render()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--mu);font-size:14px">✕</button>`:'<span style="position:absolute;right:9px;top:50%;transform:translateY(-50%);color:var(--mu);font-size:13px">🔍</span>'}
+      ${ridesSearch?`<button onclick="ridesSearch='';document.getElementById('rides-search').value='';updateRidesSearch('')" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--mu);font-size:14px">✕</button>`:'<span style="position:absolute;right:9px;top:50%;transform:translateY(-50%);color:var(--mu);font-size:13px">🔍</span>'}
     </div>
   </div>`;
 
@@ -1247,6 +1247,18 @@ async function importBackup(e){
     }catch{alert('Invalid file.');}
   };
   r.readAsText(f);e.target.value='';
+}
+
+// ── SEARCH (no full re-render, keeps focus) ──────────
+function updateRidesSearch(val){
+  ridesSearch=val;
+  // Only re-render the content div, then restore cursor position
+  const el=document.getElementById('content');
+  if(!el)return;
+  el.innerHTML=rRides();
+  // Restore focus + cursor to end of input
+  const inp=document.getElementById('rides-search');
+  if(inp){inp.focus();const len=inp.value.length;inp.setSelectionRange(len,len);}
 }
 
 // ── INIT ────────────────────────────────────────────
