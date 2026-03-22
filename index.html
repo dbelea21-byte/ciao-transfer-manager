@@ -176,17 +176,7 @@ textarea{resize:vertical;min-height:56px}
     Open anyway
   </button>
 </div>
-<script>
-// Show "Open anyway" button after 3 seconds
-setTimeout(()=>{
-  const btn=document.getElementById('loading-skip');
-  const msg=document.getElementById('loading-msg');
-  if(btn&&document.getElementById('loading-overlay').style.display!=='none'){
-    if(msg)msg.textContent='Taking longer than usual...';
-    btn.style.display='block';
-  }
-},3000);
-</script>
+
 
 <nav id="sidebar">
   <div class="sb-logo">
@@ -256,20 +246,7 @@ function chkLoad(){
     setSS('ok'); render();
   }
 }
-// Fallback: force open after 4 seconds
-function forceOpen(){
-  Object.keys(LOADED).forEach(k=>LOADED[k]=true);
-  // Ensure DATA arrays are initialized
-  ['drivers','contacts','rides','expenses','payments'].forEach(k=>{if(!Array.isArray(DATA[k]))DATA[k]=[];});
-  if(!DATA.company||typeof DATA.company!=='object')DATA.company={};
-  document.getElementById('loading-overlay').style.display='none';
-  setSS('err');
-  render();
-}
-setTimeout(()=>{
-  const overlay=document.getElementById('loading-overlay');
-  if(overlay&&overlay.style.display!=='none') forceOpen();
-},4000);
+
 function setSS(s){
   const e=document.getElementById('sync-status');if(!e)return;
   e.className='sb-sync '+s;
@@ -1376,6 +1353,31 @@ function updateRidesSearch(val){
   const inp=document.getElementById('rides-search');
   if(inp){inp.focus();const len=inp.value.length;inp.setSelectionRange(len,len);}
 }
+
+// ── FORCE OPEN / TIMEOUT ─────────────────────────────
+function forceOpen(){
+  Object.keys(LOADED).forEach(k=>LOADED[k]=true);
+  ['drivers','contacts','rides','expenses','payments'].forEach(k=>{if(!Array.isArray(DATA[k]))DATA[k]=[];});
+  if(!DATA.company||typeof DATA.company!=='object')DATA.company={};
+  const overlay=document.getElementById('loading-overlay');
+  if(overlay)overlay.style.display='none';
+  setSS('err');
+  render();
+}
+// Show "Open anyway" after 3s, auto-open after 6s
+setTimeout(()=>{
+  const overlay=document.getElementById('loading-overlay');
+  if(overlay&&overlay.style.display!=='none'){
+    const msg=document.getElementById('loading-msg');
+    const btn=document.getElementById('loading-skip');
+    if(msg)msg.textContent='Taking longer than usual...';
+    if(btn)btn.style.display='block';
+  }
+},3000);
+setTimeout(()=>{
+  const overlay=document.getElementById('loading-overlay');
+  if(overlay&&overlay.style.display!=='none')forceOpen();
+},6000);
 
 // ── INIT ────────────────────────────────────────────
 document.getElementById('sb-date').textContent=new Date().toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'long',year:'numeric'});
