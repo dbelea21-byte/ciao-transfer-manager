@@ -166,17 +166,17 @@ textarea{resize:vertical;min-height:56px}
       <svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="currentColor"/></svg>Connecting...
     </div>
   </div>
-  <div class="sb-sec">Setup</div>
-  <div class="ni active" id="nav-company" onclick="go('company')"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Company Info</div>
-  <div class="ni" id="nav-drivers" onclick="go('drivers')"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>Drivers</div>
-  <div class="sb-sec">Directory</div>
-  <div class="ni" id="nav-contacts" onclick="go('contacts')"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Contacts</div>
   <div class="sb-sec">Operations</div>
-  <div class="ni" id="nav-rides" onclick="go('rides')"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>Rides</div>
+  <div class="ni active" id="nav-rides" onclick="go('rides')"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>Rides</div>
   <div class="ni" id="nav-expenses" onclick="go('expenses')"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6"/></svg>Expenses</div>
   <div class="sb-sec">Analysis</div>
   <div class="ni" id="nav-stats" onclick="go('stats')"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Statistics</div>
   <div class="ni" id="nav-statements" onclick="go('statements')"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Statements</div>
+  <div class="sb-sec">Directory</div>
+  <div class="ni" id="nav-contacts" onclick="go('contacts')"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Contacts</div>
+  <div class="sb-sec">Setup</div>
+  <div class="ni" id="nav-company" onclick="go('company')"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Company Info</div>
+  <div class="ni" id="nav-drivers" onclick="go('drivers')"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>Drivers</div>
   <div class="sb-ft">
     <div id="sb-date"></div>
     <div style="margin-top:2px">Firebase Firestore</div>
@@ -185,7 +185,7 @@ textarea{resize:vertical;min-height:56px}
 
 <div id="main">
   <div class="topbar">
-    <div class="tb-title" id="tb-title">Company Info</div>
+    <div class="tb-title" id="tb-title">Rides</div>
     <div class="tb-right">
       <button class="btn btn-sec btn-sm" onclick="exportBackup()">&#8595; Backup</button>
       <button class="btn btn-sec btn-sm" onclick="document.getElementById('imp').click()">&#8593; Restore</button>
@@ -208,10 +208,11 @@ firebase.initializeApp({
 const db = firebase.firestore();
 
 // ── STATE ──────────────────────────────────────────
-let TAB='company', fM=new Date().getMonth(), fY=new Date().getFullYear();
+let TAB='rides', fM=new Date().getMonth(), fY=new Date().getFullYear();
 let stmtContact='', stmtM=new Date().getMonth(), stmtY=new Date().getFullYear();
 let stmtFrom='', stmtTo='';
-let ridesView='list';
+let ridesSearch='';
+let ridesView='calendar';
 let DATA={company:{},drivers:[],contacts:[],rides:[],expenses:[],payments:[]};
 let LOADED={company:false,drivers:false,contacts:false,rides:false,expenses:false,payments:false};
 
@@ -502,7 +503,20 @@ function saveContact(id){
 
 // ── RIDES ──────────────────────────────────────────
 function rRides(){
-  const list=DATA.rides.filter(r=>inF(r.date)).sort((a,b)=>b.date>a.date?1:-1);
+  // Search filter: matches from, to, passenger, client name, note, driver name
+  function matchSearch(r){
+    if(!ridesSearch) return true;
+    const q=ridesSearch.toLowerCase();
+    const fields=[
+      r.da||'', r.a||'', r.passenger||'', r.note||'',
+      cN(r.client_id), cN(r.supplier_id),
+      r.driver_id?auN(r.driver_id):'',
+      r.vehicle||'', r.method||'', r.channel||''
+    ];
+    return fields.some(f=>f.toLowerCase().includes(q));
+  }
+  const allMonth=DATA.rides.filter(r=>inF(r.date));
+  const list=(ridesSearch?DATA.rides:allMonth).filter(matchSearch).sort((a,b)=>b.date>a.date?1:-1);
   const totEarned=list.reduce((s,r)=>s+rideEarned(r),0);
   const viewToggle=`<div style="display:flex;gap:4px">
     <button class="btn btn-sm ${ridesView==='list'?'btn-pr':'btn-sec'}" onclick="ridesView='list';render()">
@@ -512,14 +526,27 @@ function rRides(){
     <button class="btn btn-pr btn-sm" onclick="editRide()">+ Add ride</button>
   </div>`;
 
-  const header=`<div class="filters">${fsel()}</div>
+  const searchBar=`<div style="display:flex;align-items:center;gap:8px;flex:1;max-width:320px">
+    <div style="position:relative;flex:1">
+      <input type="text" id="rides-search" placeholder="Search rides, passengers, routes..." 
+        value="${ridesSearch}"
+        oninput="ridesSearch=this.value;render()"
+        style="width:100%;padding:6px 32px 6px 11px;border:1px solid ${ridesSearch?'var(--pr)':'var(--bd)'};border-radius:7px;font-size:13px;background:var(--su);color:var(--tx)">
+      ${ridesSearch?`<button onclick="ridesSearch='';render()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--mu);font-size:14px">✕</button>`:'<span style="position:absolute;right:9px;top:50%;transform:translateY(-50%);color:var(--mu);font-size:13px">🔍</span>'}
+    </div>
+  </div>`;
+
+  const header=`<div class="filters" style="justify-content:space-between;flex-wrap:wrap">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${fsel()}</div>
+    ${searchBar}
+  </div>
 <div class="card">
 <div class="ch">
-  <span class="ct">Rides — ${MONTHS[fM]} ${fY} &nbsp;<span class="mu fs12">${list.length} total · ${eu(totEarned)} net earned</span></span>
+  <span class="ct">${ridesSearch?`Search: "${ridesSearch}" — ${list.length} result${list.length!==1?'s':''}`:`Rides — ${MONTHS[fM]} ${fY} &nbsp;<span class="mu fs12">${list.length} total · ${eu(totEarned)} net earned</span>`}</span>
   ${viewToggle}
 </div>`;
 
-  if(ridesView==='calendar') return header+buildCalendar(list)+`</div>`;
+  if(ridesView==='calendar'&&!ridesSearch) return header+buildCalendar(list)+`</div>`;
 
   return header+`
 ${list.length===0?`<div class="empty"><div class="empty-t">No rides this period</div></div>`:`
