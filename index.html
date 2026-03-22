@@ -170,8 +170,23 @@ textarea{resize:vertical;min-height:56px}
 
 <div id="loading-overlay" class="loading-overlay">
   <div class="spinner"></div>
-  <div style="font-size:14px;color:var(--mu)">Connecting to cloud...</div>
+  <div style="font-size:14px;color:var(--mu)" id="loading-msg">Connecting to cloud...</div>
+  <button id="loading-skip" onclick="document.getElementById('loading-overlay').style.display='none';render()" 
+    style="display:none;margin-top:12px;padding:8px 20px;background:var(--pr);color:#fff;border:none;border-radius:7px;cursor:pointer;font-size:13px">
+    Open anyway
+  </button>
 </div>
+<script>
+// Show "Open anyway" button after 3 seconds
+setTimeout(()=>{
+  const btn=document.getElementById('loading-skip');
+  const msg=document.getElementById('loading-msg');
+  if(btn&&document.getElementById('loading-overlay').style.display!=='none'){
+    if(msg)msg.textContent='Taking longer than usual...';
+    btn.style.display='block';
+  }
+},3000);
+</script>
 
 <nav id="sidebar">
   <div class="sb-logo">
@@ -241,6 +256,17 @@ function chkLoad(){
     setSS('ok'); render();
   }
 }
+// Fallback: force load after 6 seconds no matter what
+setTimeout(()=>{
+  const overlay=document.getElementById('loading-overlay');
+  if(overlay&&overlay.style.display!=='none'){
+    overlay.style.display='none';
+    // Mark any unloaded collections as empty
+    Object.keys(LOADED).forEach(k=>{if(!LOADED[k])LOADED[k]=true;});
+    setSS('err');
+    render();
+  }
+},4000);
 function setSS(s){
   const e=document.getElementById('sync-status');if(!e)return;
   e.className='sb-sync '+s;
