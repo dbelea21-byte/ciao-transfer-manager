@@ -492,7 +492,7 @@ function rContacts(){
 ${DATA.contacts.length===0?`<div class="empty"><div class="empty-t">No contacts yet</div></div>`:`
 <div class="tw"><table>
 <thead><tr><th>Name</th><th>Type</th><th>VAT</th><th>Phone</th><th>Email</th><th>Overall balance</th><th>Notes</th><th></th></tr></thead>
-<tbody>${DATA.contacts.map(c=>{
+<tbody>${[...DATA.contacts].sort((a,b)=>a.name.localeCompare(b.name)).map(c=>{
   const tags=[c.is_client?`<span class="badge b-b">Client</span>`:'',c.is_supplier?`<span class="badge b-pu">Supplier</span>`:''].filter(Boolean).join(' ');
   const bal=contactBalance(c.id);
   const bb=bal>0.01?`<span class="badge b-g">${eu(bal)} owes CT</span>`:bal<-0.01?`<span class="badge b-r">${eu(Math.abs(bal))} CT owes</span>`:`<span class="badge b-gr">Even</span>`;
@@ -1149,7 +1149,7 @@ function resetStmtPeriod(){
 }
 function rStatements(){
   // Build list of contacts involved in rides
-  const contactList=DATA.contacts;
+  const contactList=[...DATA.contacts].sort((a,b)=>a.name.localeCompare(b.name));
 
   const stmtSel=`<select id="stmt-contact" onchange="stmtContact=this.value;document.getElementById('stmt-content').innerHTML=buildStmtHTML()">
     <option value="">— select a contact —</option>
