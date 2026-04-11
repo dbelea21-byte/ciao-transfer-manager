@@ -164,192 +164,6 @@ textarea{resize:vertical;min-height:56px}
 .exp-row{display:grid;grid-template-columns:90px 1fr 80px 80px 28px;align-items:center;gap:8px;padding:9px 14px 9px 56px;border-bottom:1px solid #f8fafc;font-size:13px}
 .exp-row:last-child{border-bottom:none}
 .exp-row:hover{background:#fef9f6}
-
-/* ═══════════════════════════════════════
-   MOBILE — Samsung Android Portrait
-   ═══════════════════════════════════════ */
-@media (max-width: 600px) {
-
-  /* ── Sidebar: hidden by default, slides in as overlay ── */
-  #sidebar {
-    transform: translateX(-100%);
-    transition: transform .25s cubic-bezier(.4,0,.2,1);
-    box-shadow: none;
-  }
-  #sidebar.mob-open {
-    transform: translateX(0);
-    box-shadow: 4px 0 24px rgba(0,0,0,.45);
-  }
-
-  /* Overlay backdrop */
-  #mob-overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,.5);
-    z-index: 49;
-  }
-  #mob-overlay.visible { display: block; }
-
-  /* ── Main: full width ── */
-  #main { margin-left: 0 !important; }
-  body { font-size: 13px; }
-
-  /* ── Topbar ── */
-  .topbar { padding: 10px 14px !important; }
-  .tb-title { font-size: 15px !important; }
-
-  /* Hamburger button */
-  #mob-menu-btn {
-    display: flex !important;
-    align-items: center;
-    justify-content: center;
-    width: 38px; height: 38px;
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: var(--tx);
-    border-radius: 8px;
-    margin-right: 8px;
-    flex-shrink: 0;
-    -webkit-tap-highlight-color: transparent;
-  }
-  #mob-menu-btn:active { background: var(--bd); }
-
-  /* Backup/Restore buttons — smaller */
-  .tb-right .btn-sm {
-    padding: 6px 9px !important;
-    font-size: 11px !important;
-  }
-
-  /* ── Content padding ── */
-  .content { padding: 14px 12px 24px !important; }
-
-  /* ── Stat grid: 2 columns ── */
-  .stat-grid {
-    grid-template-columns: repeat(2, 1fr) !important;
-    gap: 8px !important;
-    margin-bottom: 12px !important;
-  }
-  .sc { padding: 11px 13px !important; }
-  .sc-val { font-size: 19px !important; }
-  .sc-lbl { font-size: 9px !important; }
-  .sc-sub { font-size: 10px !important; }
-
-  /* ── Cards ── */
-  .card { padding: 13px 13px !important; margin-bottom: 12px !important; }
-  .ct { font-size: 13px !important; }
-  .ch { gap: 8px !important; }
-
-  /* ── Tables: horizontal scroll ── */
-  .tw {
-    border-radius: 8px;
-    border: 1px solid var(--bd);
-    -webkit-overflow-scrolling: touch;
-  }
-  table { font-size: 12px !important; white-space: nowrap; }
-  th { padding: 6px 9px !important; font-size: 9px !important; }
-  td { padding: 8px 9px !important; }
-
-  /* ── Forms: single column ── */
-  .fg { grid-template-columns: 1fr !important; gap: 8px !important; }
-  .two, .three { grid-template-columns: 1fr !important; gap: 12px !important; }
-
-  /* Font size 16px prevents Android zoom on focus */
-  input[type=text], input[type=number], input[type=date],
-  input[type=email], input[type=tel], select, textarea {
-    font-size: 16px !important;
-    padding: 10px 11px !important;
-  }
-
-  /* ── Buttons: bigger tap targets ── */
-  .btn { min-height: 40px !important; }
-  .btn-sm { min-height: 34px !important; padding: 7px 12px !important; font-size: 12px !important; }
-  .btn-ed, .btn-gh {
-    min-height: 34px !important;
-    min-width: 38px !important;
-    padding: 5px 9px !important;
-    font-size: 12px !important;
-  }
-
-  /* ── Modals: slide up from bottom ── */
-  .mbg {
-    padding: 0 !important;
-    align-items: flex-end !important;
-  }
-  .modal, .modal.wide {
-    width: 100% !important;
-    max-width: 100% !important;
-    border-radius: 18px 18px 0 0 !important;
-    max-height: 93vh !important;
-    padding: 22px 16px 28px !important;
-  }
-  .mclose { top: 14px !important; right: 14px !important; font-size: 20px !important; }
-  .mh { font-size: 15px !important; padding-right: 30px; }
-  .mf { gap: 8px !important; }
-  .mf .btn { flex: 1 !important; justify-content: center !important; }
-
-  /* ── Calendar ── */
-  .cal-day-hdr { padding: 5px 2px !important; font-size: 8px !important; }
-  .cal-cell { min-height: 58px !important; padding: 3px !important; }
-  .cal-num { font-size: 10px !important; width: 19px !important; height: 19px !important; }
-  .cal-ride { font-size: 9px !important; padding: 1px 3px !important; }
-  .cal-more { font-size: 9px !important; }
-
-  /* ── Day panel ── */
-  .day-panel-title { font-size: 13px !important; }
-  .day-panel-head { padding: 10px 13px !important; }
-  .day-ride-row { padding: 9px 13px !important; }
-  .day-ride-earn { font-size: 12px !important; min-width: 60px !important; }
-
-  /* ── Filters row ── */
-  .filters { gap: 6px !important; flex-wrap: wrap !important; }
-  .filters select { font-size: 14px !important; padding: 6px 8px !important; }
-
-  /* ── Statements ── */
-  .stmt-row {
-    grid-template-columns: 68px minmax(0,1fr) 85px 55px !important;
-    gap: 5px !important;
-    padding: 8px 11px !important;
-    font-size: 11px !important;
-  }
-  .stmt-row > *:nth-child(5),
-  .stmt-row > *:nth-child(6),
-  .stmt-row > *:nth-child(7) { display: none !important; }
-  .stmt-head { padding: 10px 13px !important; flex-wrap: wrap !important; gap: 8px !important; }
-  .stmt-name { font-size: 13px !important; }
-  .stmt-total { font-size: 15px !important; }
-  .stmt-footer { padding: 10px 13px !important; gap: 8px !important; flex-wrap: wrap !important; }
-  .stmt-box { margin-bottom: 12px !important; }
-
-  /* ── Expenses accordion ── */
-  .exp-group-name { font-size: 13px !important; }
-  .exp-group-amt { font-size: 14px !important; }
-  .exp-row {
-    grid-template-columns: 78px minmax(0,1fr) 72px 28px !important;
-    padding-left: 44px !important;
-    gap: 6px !important;
-    font-size: 12px !important;
-  }
-  .exp-row > *:nth-child(4) { display: none !important; }
-
-  /* ── Bar charts ── */
-  .br {
-    grid-template-columns: 90px 1fr 65px !important;
-    font-size: 11px !important;
-    gap: 6px !important;
-  }
-  .bl { font-size: 10px !important; }
-  .bv { font-size: 11px !important; }
-
-  /* ── Misc ── */
-  .badge { font-size: 10px !important; padding: 2px 5px !important; }
-  .info-row { font-size: 12px !important; padding: 7px 0 !important; }
-  .ride-summary { font-size: 12px !important; padding: 10px 12px !important; }
-  .empty { padding: 28px 16px !important; }
-  .empty-t { font-size: 13px !important; }
-  .sep { margin: 10px 0 !important; }
-}
 </style>
 </head>
 <body>
@@ -393,14 +207,8 @@ textarea{resize:vertical;min-height:56px}
 </nav>
 
 <div id="main">
-  <div id="mob-overlay" onclick="closeMobMenu()"></div>
   <div class="topbar">
-    <div style="display:flex;align-items:center;flex:1;min-width:0">
-      <button id="mob-menu-btn" onclick="toggleMobMenu()" style="display:none;align-items:center;justify-content:center;width:38px;height:38px;background:none;border:none;cursor:pointer;color:var(--tx);border-radius:8px;margin-right:8px;flex-shrink:0;-webkit-tap-highlight-color:transparent" aria-label="Menu">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-      </button>
-      <div class="tb-title" id="tb-title">Rides</div>
-    </div>
+    <div class="tb-title" id="tb-title">Rides</div>
     <div class="tb-right">
       <button class="btn btn-sec btn-sm" onclick="exportBackup()">&#8595; Backup</button>
       <button class="btn btn-sec btn-sm" onclick="document.getElementById('imp').click()">&#8593; Restore</button>
@@ -484,26 +292,29 @@ const bm=(m,short=false)=>{
 // Voucher = earned but pending bank transfer
 function rideEarned(r){
   if(r.is_intermediate) return +r.price - (+r.commission||0) - (+r.sub_price||0);
-  if(r.supplier_id!=='CT') return 0;
+  if(r.supplier_id!=='CT'){
+    if(+r.outsourced_cost>0) return +r.price - (+r.commission||0) - (+r.outsourced_cost||0);
+    return 0;
+  }
   return +r.price - (+r.commission||0);
 }
 
 // Cash CT collected physically
 function rideCashCollected(r){
   if(r.method!=='Cash') return 0;
-  if(!r.is_intermediate&&r.supplier_id!=='CT') return 0;
+  if(!r.is_intermediate&&r.supplier_id!=='CT'&&!(+r.outsourced_cost>0)) return 0;
   return +r.price;
 }
 // Card CT collected physically
 function rideCardCollected(r){
   if(r.method!=='Card') return 0;
-  if(!r.is_intermediate&&r.supplier_id!=='CT') return 0;
+  if(!r.is_intermediate&&r.supplier_id!=='CT'&&!(+r.outsourced_cost>0)) return 0;
   return +r.price;
 }
 // Voucher amount pending bank transfer (CT is supplier)
 function rideVoucherPending(r){
   if(r.method!=='Voucher (settle later)') return 0;
-  if(!r.is_intermediate&&r.supplier_id!=='CT') return 0;
+  if(!r.is_intermediate&&r.supplier_id!=='CT'&&!(+r.outsourced_cost>0)) return 0;
   return +r.price - (+r.commission||0);
 }
 
@@ -773,15 +584,16 @@ ${list.length===0?`<div class="empty"><div class="empty-t">No rides this period<
   const earned=rideEarned(r);
   const isV=r.method==='Voucher (settle later)';
   const isI=r.is_intermediate;
-  const eCell=isI?`<span class="fw6 tok">${eu(earned)}</span><span class="mu fs11"> net</span>`:r.supplier_id!=='CT'?`<span class="mu fs12">—</span>`:isV?`<span class="fw6 twarn">${eu(earned)}</span><span class="mu fs11"> pend.</span>`:`<span class="fw6 tok">${eu(earned)}</span>`;
-  const typeCell=isI?`<span class="badge b-or">Intermediate</span>`:r.supplier_id==='CT'?`<span class="badge b-g">CT drives</span>`:`<span class="badge b-pu">Outsourced</span>`;
+  const hasOutCost=!isI&&r.supplier_id!=='CT'&&+r.outsourced_cost>0;
+  const eCell=isI?`<span class="fw6 tok">${eu(earned)}</span><span class="mu fs11"> net</span>`:hasOutCost?`<span class="fw6 tok">${eu(earned)}</span><span class="mu fs11"> net</span>`:r.supplier_id!=='CT'?`<span class="mu fs12">—</span>`:isV?`<span class="fw6 twarn">${eu(earned)}</span><span class="mu fs11"> pend.</span>`:`<span class="fw6 tok">${eu(earned)}</span>`;
+  const typeCell=isI?`<span class="badge b-or">Intermediate</span>`:r.supplier_id==='CT'?`<span class="badge b-g">CT drives</span>`:hasOutCost?`<span class="badge b-or">Outsourced</span>`:`<span class="badge b-pu">Outsourced</span>`;
   return`<tr>
   <td class="fs12">${r.date}</td>
   <td class="fw6 fs12">${r.pickup_time||'—'}</td>
   <td style="max-width:130px;overflow:hidden;text-overflow:ellipsis">${r.da||''}${r.a?' → '+r.a:''}</td>
   <td><span class="badge b-b fs11">${cN(r.client_id)}</span></td>
   <td><span class="badge b-pu fs11">${isI?cN(r.sub_supplier_id||''):cN(r.supplier_id)}</span></td>
-  <td class="fw6">${eu(r.price)}${isI?`<br><span class="mu fs11">→ pay ${eu(r.sub_price)}</span>`:''}</td>
+  <td class="fw6">${eu(r.price)}${isI?`<br><span class="mu fs11">→ pay ${eu(r.sub_price)}</span>`:hasOutCost?`<br><span class="mu fs11">→ paid ${eu(r.outsourced_cost)}</span>`:''}</td>
   <td>${eCell}</td>
   <td>${bm(r.method)}${isI&&r.sub_method?`<br>${bm(r.sub_method)}`:''}</td>
   <td>${typeCell}</td>
@@ -906,11 +718,13 @@ function editRideOnDate(ds){
 // ── ADD / EDIT RIDE ────────────────────────────────
 function editRide(id){
   const r=DATA.rides.find(x=>x.id===id)||{date:today(),client_id:'CT',supplier_id:'CT',method:'Cash',commission:0,is_intermediate:false};
+  const sortedClients=[...DATA.contacts.filter(c=>c.is_client)].sort((a,b)=>a.name.localeCompare(b.name));
+  const sortedSuppliers=[...DATA.contacts.filter(c=>c.is_supplier)].sort((a,b)=>a.name.localeCompare(b.name));
   const cOpts=`<option value="CT"${r.client_id==='CT'?' selected':''}>Ciao Transfer (direct)</option>`
-    +DATA.contacts.filter(c=>c.is_client).map(c=>`<option value="${c.id}"${r.client_id===c.id?' selected':''}>${c.name}</option>`).join('');
+    +sortedClients.map(c=>`<option value="${c.id}"${r.client_id===c.id?' selected':''}>${c.name}</option>`).join('');
   const sOpts=`<option value="CT"${(!r.supplier_id||r.supplier_id==='CT')?' selected':''}>Ciao Transfer (we drive)</option>`
-    +DATA.contacts.filter(c=>c.is_supplier).map(c=>`<option value="${c.id}"${r.supplier_id===c.id?' selected':''}>${c.name}</option>`).join('');
-  const ssOpts=DATA.contacts.filter(c=>c.is_supplier).map(c=>`<option value="${c.id}"${r.sub_supplier_id===c.id?' selected':''}>${c.name}</option>`).join('');
+    +sortedSuppliers.map(c=>`<option value="${c.id}"${r.supplier_id===c.id?' selected':''}>${c.name}</option>`).join('');
+  const ssOpts=sortedSuppliers.map(c=>`<option value="${c.id}"${r.sub_supplier_id===c.id?' selected':''}>${c.name}</option>`).join('');
   const dOpts=DATA.drivers.map(a=>`<option value="${a.id}"${r.driver_id===a.id?' selected':''}>${a.name}</option>`).join('');
   const isI=r.is_intermediate||false;
   showM(`<div class="mh">${id?'Edit':'Add'} ride</div>
@@ -942,6 +756,11 @@ function editRide(id){
     <label class="fl">Commission to client (€)</label>
     <input type="number" id="f-comm" min="0" step="0.01" value="${r.commission||0}" placeholder="0.00" oninput="updSummary()">
     <span class="mu fs11" style="margin-top:2px">CT pays back to client</span>
+  </div>
+  <div class="fgroup" id="outsource-cost-grp" style="display:none">
+    <label class="fl">Price paid to collaborator (€)</label>
+    <input type="number" id="f-outsourced-cost" min="0" step="0.01" value="${r.outsourced_cost||''}" placeholder="0.00" oninput="updSummary()">
+    <span class="mu fs11" style="margin-top:2px">What CT pays the driver — your net = price − this</span>
   </div>
 </div>
 
@@ -1006,18 +825,24 @@ function updSummary(){
   if(interSec)interSec.style.display=isI?'block':'none';
   if(sSec)sSec.style.display=isI?'none':'flex';
   if(subCg)subCg.style.display=isSubV?'none':'flex';
+  // Show outsourced cost field when supplier is not CT and not intermediate
+  const outCostGrp=document.getElementById('outsource-cost-grp');
+  if(outCostGrp)outCostGrp.style.display=(!isI&&sid!=='CT')?'flex':'none';
   if(!el)return;
   if(!price){el.style.display='none';return;}
   const cn=cid==='CT'?'Ciao Transfer':cN(cid);
   const sn=ssid?cN(ssid):(sid==='CT'?'Ciao Transfer':cN(sid));
   let earned=0;
+  const outsourcedCost=parseFloat(document.getElementById('f-outsourced-cost')?.value)||0;
   if(isI) earned=price-(isV?0:comm)-subPrice;
-  else earned=sid==='CT'?price-(isV?0:comm):0;
+  else if(sid==='CT') earned=price-(isV?0:comm);
+  else if(outsourcedCost>0) earned=price-(isV?0:comm)-outsourcedCost;
   let rows=`<div class="sr"><span>Client</span><span class="badge b-b">${cn}</span></div>`;
   rows+=`<div class="sr"><span>${isI?'Sub-supplier (actual driver)':'Supplier'}</span><span class="badge b-pu">${sn}</span></div>`;
   rows+=`<div class="sr"><span>Price received from client</span><span class="fw6">${eu(price)}</span></div>`;
   if(!isV&&comm>0)rows+=`<div class="sr"><span>Commission owed to ${cn}</span><span class="twarn fw6">− ${eu(comm)}</span></div>`;
   if(isV)rows+=`<div class="sr"><span>Client payment</span><span class="badge b-a">Voucher — bank transfer</span></div>`;
+  if(!isI&&sid!=='CT'&&outsourcedCost>0)rows+=`<div class="sr"><span>Price paid to ${sn}</span><span class="terr fw6">− ${eu(outsourcedCost)}</span></div>`;
   if(isI&&subPrice>0){
     rows+=`<div class="sr"><span>Price paid to ${sn}</span><span class="terr fw6">− ${eu(subPrice)}</span></div>`;
     if(isSubV)rows+=`<div class="sr"><span>Sub-supplier payment</span><span class="badge b-a">Voucher — bank transfer</span></div>`;
@@ -1081,6 +906,7 @@ function saveRide(id){
     pickup_time:g('f-time')||null,
     method:document.getElementById('f-method').value,
     commission:+(document.getElementById('f-comm')?.value)||0,
+    outsourced_cost:(!isI&&supplier_id!=='CT')?(+(document.getElementById('f-outsourced-cost')?.value)||0):null,
     sub_supplier_id:isI?(g('f-ss')||null):null,
     sub_price:isI?(+(document.getElementById('f-sub-price')?.value)||0):null,
     sub_method:isI?(document.getElementById('f-sub-method')?.value||null):null,
@@ -1631,42 +1457,6 @@ setTimeout(()=>{
   const overlay=document.getElementById('loading-overlay');
   if(overlay&&overlay.style.display!=='none')forceOpen();
 },6000);
-
-// ── MOBILE MENU ──────────────────────────────────────
-function isMobile(){ return window.innerWidth<=600; }
-
-function toggleMobMenu(){
-  const sb=document.getElementById('sidebar');
-  const ov=document.getElementById('mob-overlay');
-  const open=sb.classList.contains('mob-open');
-  if(open){ closeMobMenu(); } else {
-    sb.classList.add('mob-open');
-    ov.classList.add('visible');
-    document.body.style.overflow='hidden';
-  }
-}
-function closeMobMenu(){
-  document.getElementById('sidebar').classList.remove('mob-open');
-  document.getElementById('mob-overlay').classList.remove('visible');
-  document.body.style.overflow='';
-}
-
-// Patch go() to also close menu on mobile
-const _go=go;
-window.go=function(t){
-  _go(t);
-  if(isMobile()) closeMobMenu();
-};
-
-// Show/hide hamburger on resize
-function syncMobBtn(){
-  const btn=document.getElementById('mob-menu-btn');
-  if(!btn)return;
-  btn.style.display=isMobile()?'flex':'none';
-  if(!isMobile()) closeMobMenu();
-}
-window.addEventListener('resize',syncMobBtn);
-syncMobBtn();
 
 // ── INIT ────────────────────────────────────────────
 document.getElementById('sb-date').textContent=new Date().toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'long',year:'numeric'});
