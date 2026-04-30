@@ -6,6 +6,7 @@
 <title>Ciao Transfer — NCC Manager</title>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--pr:#2563eb;--pr-l:#eff6ff;--ok:#16a34a;--ok-l:#f0fdf4;--err:#dc2626;--err-l:#fef2f2;--warn:#d97706;--warn-l:#fffbeb;--tx:#0f172a;--mu:#64748b;--bd:#e2e8f0;--bg:#f8fafc;--su:#fff;--sb:#0f172a;--r:10px}
@@ -164,22 +165,6 @@ textarea{resize:vertical;min-height:56px}
 .exp-row{display:grid;grid-template-columns:90px 1fr 80px 80px 28px;align-items:center;gap:8px;padding:9px 14px 9px 56px;border-bottom:1px solid #f8fafc;font-size:13px}
 .exp-row:last-child{border-bottom:none}
 .exp-row:hover{background:#fef9f6}
-/* Mobile hamburger menu */
-.hamburger{display:none;flex-direction:column;justify-content:center;gap:5px;width:36px;height:36px;padding:6px;cursor:pointer;border:none;background:transparent;border-radius:7px;flex-shrink:0}
-.hamburger span{display:block;height:2px;background:var(--tx);border-radius:2px;transition:all .2s}
-.hamburger:hover{background:#f1f5f9}
-#sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:49}
-@media(max-width:600px){
-  #sidebar{transform:translateX(-100%);transition:transform .25s ease;z-index:50}
-  #sidebar.open{transform:translateX(0)}
-  #sb-overlay.open{display:block}
-  #main{margin-left:0}
-  .hamburger{display:flex}
-  .stat-grid{grid-template-columns:repeat(2,1fr)}
-  .two,.three{grid-template-columns:1fr}
-  .content{padding:14px}
-  .topbar{padding:10px 14px}
-}
 </style>
 </head>
 <body>
@@ -222,16 +207,9 @@ textarea{resize:vertical;min-height:56px}
   </div>
 </nav>
 
-<div id="sb-overlay" onclick="closeSidebar()"></div>
-
 <div id="main">
   <div class="topbar">
-    <div style="display:flex;align-items:center;gap:10px">
-      <button class="hamburger" onclick="toggleSidebar()" aria-label="Menu">
-        <span></span><span></span><span></span>
-      </button>
-      <div class="tb-title" id="tb-title">Rides</div>
-    </div>
+    <div class="tb-title" id="tb-title">Rides</div>
     <div class="tb-right">
       <button class="btn btn-sec btn-sm" onclick="exportBackup()">&#8595; Backup</button>
       <button class="btn btn-sec btn-sm" onclick="document.getElementById('imp').click()">&#8593; Restore</button>
@@ -243,17 +221,6 @@ textarea{resize:vertical;min-height:56px}
 <div id="mc"></div>
 
 <script>
-function toggleSidebar(){
-  const sb=document.getElementById('sidebar');
-  const ov=document.getElementById('sb-overlay');
-  sb.classList.toggle('open');
-  ov.classList.toggle('open');
-}
-function closeSidebar(){
-  document.getElementById('sidebar').classList.remove('open');
-  document.getElementById('sb-overlay').classList.remove('open');
-}
-
 firebase.initializeApp({
   apiKey:"AIzaSyAYH9m3Vfhq9jFF0RLwoXCwFoPo_XjS-9k",
   authDomain:"ciao-transfer.firebaseapp.com",
@@ -449,7 +416,6 @@ function barchart(obj,cls=''){
 
 // ── NAV ────────────────────────────────────────────
 function go(t){
-  closeSidebar();
   TAB=t;
   document.querySelectorAll('.ni').forEach(x=>x.classList.remove('active'));
   const e=document.getElementById('nav-'+t);if(e)e.classList.add('active');
@@ -1295,19 +1261,38 @@ function buildStmtHTML(){
   }
 
   // ── Period balance summary ──
-  // net = rides balance in period - payments already made in period
-  // = what is still unpaid in this period
   const netAmt=Math.abs(S.net);
   const ctOwes=S.net<-0.01, contactOwes=S.net>0.01;
-  html+=`<div class="stmt-footer ${ctOwes?'owe':''}">
-    <div>
-      <div style="font-size:12px;color:var(--mu);margin-bottom:4px">
-        Vouchers they owe CT: <strong>${eu(S.voucherOwed)}</strong> &nbsp;|&nbsp;
-        Vouchers CT owes: <strong>${eu(S.voucherWePay)}</strong> &nbsp;|&nbsp;
-        Commission CT owes: <strong>${eu(S.ctCommOwed)}</strong> &nbsp;|&nbsp;
-        Commission CT earns: <strong>${eu(S.ctCommEarned)}</strong>
-        ${S.subPriceOwed>0?` &nbsp;|&nbsp; Sub-price CT owes: <strong>${eu(S.subPriceOwed)}</strong>`:''}
+
+  // ── Voucher vs Cash net breakdown ──
+  const netVoucher=S.voucherOwed-S.voucherWePay; // + = contact owes CT (voucher), - = CT owes contact (voucher)
+  const netCash=S.ctCommEarned-S.ctCommOwed;      // + = contact owes CT (cash),    - = CT owes contact (cash)
+  const netVoucherAbs=Math.abs(netVoucher), netCashAbs=Math.abs(netCash);
+  const voucherLbl=netVoucher>0.01?`${contact.name} owes CT ${eu(netVoucherAbs)} <span style="color:#92400e;font-size:10px">(Bon)</span>`:netVoucher<-0.01?`CT owes ${contact.name} ${eu(netVoucherAbs)} <span style="color:#92400e;font-size:10px">(Bon)</span>`:`<span style="color:var(--mu)">Even</span>`;
+  const cashLbl=netCash>0.01?`${contact.name} owes CT ${eu(netCashAbs)} <span style="color:#1e40af;font-size:10px">(Cash)</span>`:netCash<-0.01?`CT owes ${contact.name} ${eu(netCashAbs)} <span style="color:#1e40af;font-size:10px">(Cash)</span>`:`<span style="color:var(--mu)">Even</span>`;
+
+  html+=`
+  <div style="background:#f8fafc;border:1px solid var(--bd);border-radius:8px;padding:14px 18px;margin:0 0 2px 0">
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--mu);margin-bottom:10px">Payment Type Breakdown</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:10px 12px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#92400e;margin-bottom:6px">🟡 Voucher (Bon)</div>
+        <div style="font-size:12px;margin-bottom:3px;display:flex;justify-content:space-between"><span>${contact.name} owes CT (Bon)</span><strong>${eu(S.voucherOwed)}</strong></div>
+        <div style="font-size:12px;margin-bottom:8px;display:flex;justify-content:space-between"><span>CT owes ${contact.name} (Bon)</span><strong>${eu(S.voucherWePay)}</strong></div>
+        <div style="border-top:1px solid #fde68a;padding-top:7px;font-size:12px;font-weight:700">${voucherLbl}</div>
       </div>
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:10px 12px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#1e40af;margin-bottom:6px">💵 Cash / Commission</div>
+        <div style="font-size:12px;margin-bottom:3px;display:flex;justify-content:space-between"><span>${contact.name} owes CT (comm)</span><strong>${eu(S.ctCommEarned)}</strong></div>
+        <div style="font-size:12px;margin-bottom:8px;display:flex;justify-content:space-between"><span>CT owes ${contact.name} (comm)</span><strong>${eu(S.ctCommOwed)}</strong></div>
+        <div style="border-top:1px solid #bfdbfe;padding-top:7px;font-size:12px;font-weight:700">${cashLbl}</div>
+      </div>
+    </div>
+    ${S.subPriceOwed>0?`<div style="font-size:11px;color:var(--mu);margin-top:8px">Sub-price CT owes: <strong>${eu(S.subPriceOwed)}</strong></div>`:''}
+  </div>
+
+  <div class="stmt-footer ${ctOwes?'owe':''}">
+    <div>
       <div style="font-size:12px;color:var(--mu)">
         Payments already settled this period: received ${eu(S.paidByContact)} · paid out ${eu(S.paidByCT)}
       </div>
@@ -1317,10 +1302,12 @@ function buildStmtHTML(){
       <div class="stmt-total ${contactOwes?'tok':ctOwes?'terr':'mu'}">
         ${contactOwes?contact.name+' owes CT '+eu(netAmt):ctOwes?'CT owes '+contact.name+' '+eu(netAmt):'All settled ✔'}
       </div>
-      <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">
+      <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end;flex-wrap:wrap">
         ${contactOwes?`<button class="btn btn-ok btn-sm" onclick="markPaid('${stmtContact}','contact_to_ct',${netAmt.toFixed(2)})">Mark as received from ${contact.name}</button>`:''}
         ${ctOwes?`<button class="btn btn-warn btn-sm" onclick="markPaid('${stmtContact}','ct_to_contact',${netAmt.toFixed(2)})">Mark as paid to ${contact.name}</button>`:''}
         <button class="btn btn-sec btn-sm" onclick="markPaid('${stmtContact}','custom',0)">Record custom payment</button>
+        <button class="btn btn-sec btn-sm" onclick="downloadStmtExcel()" title="Download Excel">⬇ Excel</button>
+        <button class="btn btn-sec btn-sm" onclick="downloadStmtPDF()" title="Download PDF">⬇ PDF</button>
       </div>
     </div>
   </div>
@@ -1409,7 +1396,158 @@ function buildStmtHTML(){
   return html;
 }
 
-function markPaid(contactId,direction,amount){
+function downloadStmtExcel(){
+  if(!stmtContact||typeof XLSX==='undefined') return alert('Export not ready — try reloading.');
+  const contact=DATA.contacts.find(x=>x.id===stmtContact);
+  const S=buildStatement(stmtContact,stmtFrom,stmtTo);
+  const rows=[];
+
+  // Header row
+  rows.push(['#','Date','Time','From','To','Passenger','Method','Bon (Voucher)','Cash','Segnata (Comm)','CT Effect']);
+
+  // Direction helper
+  function rowDir(r){
+    if(r.supplier_id==='CT'&&r.client_id===stmtContact) return 'CT drives for '+contact.name;
+    if(r.supplier_id===stmtContact&&r.client_id==='CT') return contact.name+' drives for CT';
+    if(r.is_intermediate) return 'Intermediate';
+    return '';
+  }
+
+  let idx=1;
+  S.rides.forEach(r=>{
+    const isV=r.method==='Voucher (settle later)';
+    const isSubV=r.is_intermediate&&r.sub_method==='Voucher (settle later)';
+    const ctSup=r.supplier_id==='CT'&&r.client_id===stmtContact;
+    const theySup=r.supplier_id===stmtContact&&r.client_id==='CT';
+    let bon='',cash='',comm='',effect='';
+
+    if(ctSup){
+      if(isV){bon=+r.price;effect=+(r.price);}
+      else{cash=+r.price;comm=+(r.commission||0);effect=+(r.price)-(+(r.commission||0));}
+    } else if(theySup){
+      if(isV){bon=+r.price;effect=-(+r.price);}
+      else{cash=+r.price;comm=+(r.commission||0);effect=-(+(r.price))+(+(r.commission||0));}
+    } else if(r.is_intermediate){
+      if(r.client_id===stmtContact){
+        if(isV){bon=+r.price;}else{cash=+r.price;comm=+(r.commission||0);}
+      } else {
+        if(isSubV){bon=+r.sub_price;}else{cash=+r.sub_price;comm=+(r.sub_commission||0);}
+      }
+    }
+
+    const timeStr=r.pickup_time||'';
+    const methodShort=r.method==='Voucher (settle later)'?'Voucher':r.method;
+    rows.push([idx++, r.date, timeStr, r.da||'', r.a||'', r.passenger||'', methodShort,
+      bon===''?'':bon, cash===''?'':cash, comm===''||comm===0?'':comm, effect===''?'':effect]);
+  });
+
+  // Payments
+  if(S.payments.length>0){
+    rows.push([]);
+    rows.push(['','PAYMENTS RECORDED THIS PERIOD','','','','','','','','','']);
+    rows.push(['','Date','Note','Direction','','','','','Amount','','']);
+    S.payments.forEach(p=>{
+      const dir=p.direction==='contact_to_ct'?contact.name+' → CT':'CT → '+contact.name;
+      const sign=p.direction==='contact_to_ct'?+p.amount:-p.amount;
+      rows.push(['',p.date,p.note||'Settlement',dir,'','','','',sign,'','']);
+    });
+  }
+
+  rows.push([]);
+  // Breakdown section
+  rows.push(['','PAYMENT TYPE BREAKDOWN','','','','','','','','','']);
+  rows.push(['',contact.name+' owes CT (Bon / Voucher)','','','','','',S.voucherOwed,'','','']);
+  rows.push(['','CT owes '+contact.name+' (Bon / Voucher)','','','','','',S.voucherWePay,'','','']);
+  const netV=S.voucherOwed-S.voucherWePay;
+  if(Math.abs(netV)>0.01) rows.push(['',netV>0?contact.name+' owes CT — NET Bon':'CT owes '+contact.name+' — NET Bon','','','','','',Math.abs(netV),'','','']);
+
+  rows.push([]);
+  rows.push(['',contact.name+' owes CT (Commission / Cash)','','','','','','',S.ctCommEarned,'','']);
+  rows.push(['','CT owes '+contact.name+' (Commission / Cash)','','','','','','',S.ctCommOwed,'','']);
+  const netC=S.ctCommEarned-S.ctCommOwed;
+  if(Math.abs(netC)>0.01) rows.push(['',netC>0?contact.name+' owes CT — NET Cash':'CT owes '+contact.name+' — NET Cash','','','','','','',Math.abs(netC),'','']);
+
+  rows.push([]);
+  rows.push(['','REMAINING UNPAID BALANCE','','','','','',S.net>0.01?eu(Math.abs(S.net))+' ('+contact.name+' owes CT)':S.net<-0.01?eu(Math.abs(S.net))+' (CT owes '+contact.name+')':'All settled','','','']);
+
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  // Column widths
+  ws['!cols']=[{wch:4},{wch:26},{wch:8},{wch:22},{wch:22},{wch:22},{wch:14},{wch:14},{wch:10},{wch:14},{wch:12}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Conti '+contact.name);
+  XLSX.writeFile(wb,`Conti_${contact.name}_${stmtFrom||'all'}_${stmtTo||'all'}.xlsx`);
+}
+
+function downloadStmtPDF(){
+  if(!stmtContact) return;
+  const contact=DATA.contacts.find(x=>x.id===stmtContact);
+  const printCSS=`<style>
+    body{font-family:'Segoe UI',sans-serif;font-size:12px;color:#0f172a;padding:20px}
+    h2{font-size:16px;margin-bottom:4px}
+    .mu{color:#64748b}
+    table{width:100%;border-collapse:collapse;margin:10px 0}
+    th{background:#1e293b;color:#fff;padding:5px 8px;font-size:10px;text-align:left}
+    td{padding:4px 8px;border-bottom:1px solid #e2e8f0;font-size:11px}
+    tr:nth-child(even)td{background:#f8fafc}
+    .section{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:#64748b;padding:8px 0 4px}
+    .breakdown{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
+    .box{border:1px solid #e2e8f0;border-radius:6px;padding:10px}
+    .box-title{font-size:10px;font-weight:700;color:#64748b;margin-bottom:6px}
+    .box-row{display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px}
+    .box-net{border-top:1px solid #e2e8f0;padding-top:6px;font-size:12px;font-weight:700;margin-top:6px}
+    .final{text-align:right;margin-top:12px;padding:10px;border:2px solid #0f172a;border-radius:6px}
+    .final-lbl{font-size:10px;color:#64748b}
+    .final-val{font-size:20px;font-weight:700}
+    .tok{color:#16a34a}.terr{color:#dc2626}.twarn{color:#d97706}
+    @media print{@page{margin:15mm}}
+  </style>`;
+
+  const S=buildStatement(stmtContact,stmtFrom,stmtTo);
+  const mn=(stmtFrom||'')+(stmtTo&&stmtTo!==stmtFrom?' → '+stmtTo:'');
+  const netAmt=Math.abs(S.net);
+  const ctOwes=S.net<-0.01, contactOwes=S.net>0.01;
+  const netV=S.voucherOwed-S.voucherWePay, netC=S.ctCommEarned-S.ctCommOwed;
+
+  let rideRows='';
+  S.rides.forEach((r,i)=>{
+    const isV=r.method==='Voucher (settle later)';
+    const ctSup=r.supplier_id==='CT';
+    const thSup=r.supplier_id===stmtContact;
+    let bon='',cash='',comm='';
+    if(ctSup&&r.client_id===stmtContact){if(isV)bon=eu(r.price);else{cash=eu(r.price);if(r.commission>0)comm=eu(r.commission);}}
+    else if(thSup&&r.client_id==='CT'){if(isV)bon=eu(r.price);else{cash=eu(r.price);if(r.commission>0)comm=eu(r.commission);}}
+    rideRows+=`<tr><td>${i+1}</td><td>${r.date}</td><td>${r.pickup_time||''}</td><td>${r.da||''}</td><td>${r.a||''}</td><td>${r.passenger||''}</td><td>${isV?'Voucher':'Cash'}</td><td class="twarn">${bon}</td><td>${cash}</td><td class="terr">${comm}</td></tr>`;
+  });
+
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Ciao Transfer — ${contact.name} Statement</title>${printCSS}</head><body>
+  <h2>Ciao Transfer — Statement: ${contact.name}</h2>
+  <div class="mu">${mn} · ${S.rides.length} rides</div>
+  <table><thead><tr><th>#</th><th>Date</th><th>Time</th><th>From</th><th>To</th><th>Passenger</th><th>Method</th><th>Bon</th><th>Cash</th><th>Comm</th></tr></thead><tbody>${rideRows}</tbody></table>
+  <div class="section">Payment Type Breakdown</div>
+  <div class="breakdown">
+    <div class="box">
+      <div class="box-title">🟡 Voucher (Bon)</div>
+      <div class="box-row"><span>${contact.name} owes CT (Bon)</span><strong>${eu(S.voucherOwed)}</strong></div>
+      <div class="box-row"><span>CT owes ${contact.name} (Bon)</span><strong>${eu(S.voucherWePay)}</strong></div>
+      <div class="box-net ${netV>0.01?'tok':netV<-0.01?'terr':''}">Net: ${Math.abs(netV)<0.01?'Even':netV>0?contact.name+' owes CT '+eu(netV):'CT owes '+contact.name+' '+eu(Math.abs(netV))}</div>
+    </div>
+    <div class="box">
+      <div class="box-title">💵 Cash / Commission</div>
+      <div class="box-row"><span>${contact.name} owes CT (comm)</span><strong>${eu(S.ctCommEarned)}</strong></div>
+      <div class="box-row"><span>CT owes ${contact.name} (comm)</span><strong>${eu(S.ctCommOwed)}</strong></div>
+      <div class="box-net ${netC>0.01?'tok':netC<-0.01?'terr':''}">Net: ${Math.abs(netC)<0.01?'Even':netC>0?contact.name+' owes CT '+eu(netC):'CT owes '+contact.name+' '+eu(Math.abs(netC))}</div>
+    </div>
+  </div>
+  <div class="mu" style="font-size:11px;margin-bottom:8px">Payments settled: received ${eu(S.paidByContact)} · paid out ${eu(S.paidByCT)}</div>
+  <div class="final"><div class="final-lbl">Remaining unpaid balance</div><div class="final-val ${contactOwes?'tok':ctOwes?'terr':''}">${contactOwes?contact.name+' owes CT '+eu(netAmt):ctOwes?'CT owes '+contact.name+' '+eu(netAmt):'All settled ✔'}</div></div>
+  <script>window.onload=()=>window.print();<\/script></body></html>`;
+
+  const w=window.open('','_blank','width=900,height=700');
+  w.document.write(html);
+  w.document.close();
+}
+
+
   const contact=DATA.contacts.find(x=>x.id===contactId);
   let amt=amount;
   if(direction==='custom'){
