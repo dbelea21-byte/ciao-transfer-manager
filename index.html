@@ -166,32 +166,39 @@ textarea{resize:vertical;min-height:56px}
 .exp-row:last-child{border-bottom:none}
 .exp-row:hover{background:#fef9f6}
 
-/* ── Mobile (≤600px) ── */
+/* ── Hamburger button (hidden on desktop) ── */
+#ham-btn{display:none;position:fixed;top:10px;left:10px;z-index:300;
+  background:var(--pr);border:none;border-radius:8px;padding:10px 12px;
+  cursor:pointer;flex-direction:column;gap:5px;
+  box-shadow:0 2px 10px rgba(0,0,0,.25)}
+#ham-btn span{display:block;width:20px;height:2px;background:#fff;border-radius:2px}
+
+/* ── Mobile layout ── */
 @media(max-width:600px){
-  #ham-btn{display:flex}
-  #sidebar{transform:translateX(-100%);transition:transform .25s ease;z-index:100}
+  #ham-btn{display:flex!important}
+  #sidebar{transform:translateX(-220px);transition:transform .25s ease;z-index:200}
   #sidebar.open{transform:translateX(0)}
-  #sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:99}
+  #sb-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:199}
   #sb-overlay.open{display:block}
-  #main{margin-left:0!important;padding:12px 10px}
+  #main{margin-left:0!important}
+  .page-header{padding:14px 12px 8px 12px}
+  .tb-title{font-size:16px;padding-left:44px}
+  .card{padding:14px 12px}
   .stat-grid{grid-template-columns:1fr 1fr}
   .two,.three{grid-template-columns:1fr}
-  .card{padding:14px 12px}
-  .btn{padding:8px 14px;font-size:13px;min-height:40px}
+  .btn{min-height:42px;padding:9px 14px}
   input,select,textarea{font-size:16px!important}
-  .modal-box{width:95vw;max-width:95vw;padding:18px 14px}
+  .modal-box{width:96vw;max-width:96vw;padding:18px 14px;margin:10px auto}
   table{font-size:12px}
-  td,th{padding:6px 6px}
-  .stmt-footer{flex-direction:column;gap:12px;align-items:flex-start}
+  td,th{padding:5px 5px}
+  .stmt-footer{flex-direction:column;gap:10px;align-items:flex-start}
   .stmt-footer>div:last-child{text-align:left;width:100%}
-  .stmt-footer>div:last-child>div:last-child{justify-content:flex-start}
-  .page-header{flex-wrap:wrap;gap:8px}
+  .stmt-footer>div:last-child>div:last-child{flex-wrap:wrap;justify-content:flex-start}
   .filters{flex-wrap:wrap;gap:8px}
+  .cal-grid{font-size:10px}
+  .cal-day-hdr{padding:5px 2px;font-size:9px}
+  .cal-cell{min-height:60px;padding:3px}
 }
-#ham-btn{display:none;position:fixed;top:12px;left:12px;z-index:200;
-  background:var(--pr);border:none;border-radius:8px;padding:9px 11px;
-  cursor:pointer;flex-direction:column;gap:5px;box-shadow:0 2px 8px rgba(0,0,0,.2)}
-#ham-btn span{display:block;width:20px;height:2px;background:#fff;border-radius:2px}
 </style>
 </head>
 <body>
@@ -452,7 +459,6 @@ function go(t){
   document.querySelectorAll('.ni').forEach(x=>x.classList.remove('active'));
   const e=document.getElementById('nav-'+t);if(e)e.classList.add('active');
   document.getElementById('tb-title').textContent=TABS[t]||t;
-  // close sidebar on mobile
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('sb-overlay').classList.remove('open');
   render();
@@ -1583,10 +1589,8 @@ function downloadStmtPDF(){
 }
 
 function toggleSidebar(){
-  const sb=document.getElementById('sidebar');
-  const ov=document.getElementById('sb-overlay');
-  sb.classList.toggle('open');
-  ov.classList.toggle('open');
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('sb-overlay').classList.toggle('open');
 }
 
 function markPaid(contactId,direction,amount){
