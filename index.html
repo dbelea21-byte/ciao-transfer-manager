@@ -1547,7 +1547,7 @@ function downloadStmtPDF(){
   w.document.close();
 }
 
-
+function markPaid(contactId,direction,amount){
   const contact=DATA.contacts.find(x=>x.id===contactId);
   let amt=amount;
   if(direction==='custom'){
