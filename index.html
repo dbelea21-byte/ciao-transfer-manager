@@ -198,6 +198,12 @@ textarea{resize:vertical;min-height:56px}
   .cal-grid{font-size:10px}
   .cal-day-hdr{padding:5px 2px;font-size:9px}
   .cal-cell{min-height:60px;padding:3px}
+  /* Statement rows: collapse to 4 cols on mobile */
+  .stmt-row{grid-template-columns:70px 1fr 70px 28px!important;gap:4px!important;padding:6px 10px!important}
+  .stmt-row>span:nth-child(3),.stmt-row>span:nth-child(5),.stmt-row>span:nth-child(6){display:none}
+  .stmt-row>span:nth-child(4){font-size:12px}
+  .stmt-section{padding:8px 10px 2px;font-size:9px}
+  .two-box-grid{grid-template-columns:1fr!important}
 }
 </style>
 </head>
@@ -403,10 +409,29 @@ function contactBalance(contactId){
 // ── STATEMENT for one contact, one period ──────────
 function buildStatement(contactId, from, to){
   const rides=DATA.rides.filter(r=>inRange(r.date,from,to)&&(r.client_id===contactId||r.supplier_id===contactId||r.sub_supplier_id===contactId));
-  const payments=DATA.payments.filter(p=>p.contact_id===contactId&&inRange(p.date,from,to));
-  // Financial summary
+
+  // All period-based settlements for this contact (across ALL time, not filtered to viewed range)
+  const allSettlements=DATA.payments.filter(p=>p.contact_id===contactId&&p.period_from&&p.period_to);
+
+  // A ride is pre-settled if its date falls within ANY settlement's covered period
+  const settledRideIds=new Set(
+    rides.filter(r=>allSettlements.some(s=>r.date>=s.period_from&&r.date<=s.period_to))
+         .map(r=>r.id)
+  );
+
+  // Old-style payments (no period info) within the viewed range — backwards compat
+  const oldPayments=DATA.payments.filter(p=>p.contact_id===contactId&&!p.period_from&&inRange(p.date,from,to));
+
+  // Settlements shown in the payments section = those that cover at least one ride in this view
+  const relevantSettlements=allSettlements.filter(s=>
+    rides.some(r=>r.date>=s.period_from&&r.date<=s.period_to)
+  );
+  const payments=[...relevantSettlements,...oldPayments].sort((a,b)=>(a.date||a.period_from||'')>(b.date||b.period_from||'')?1:-1);
+
+  // Financial summary — UNSETTLED rides only
+  const unsettledRides=rides.filter(r=>!settledRideIds.has(r.id));
   let totalPrice=0, ctCommOwed=0, ctCommEarned=0, voucherOwed=0, voucherWePay=0, subPriceOwed=0;
-  rides.forEach(r=>{
+  unsettledRides.forEach(r=>{
     const isV=r.method==='Voucher (settle later)';
     const isSubV=r.is_intermediate&&r.sub_method==='Voucher (settle later)';
     if(r.is_intermediate){
@@ -432,12 +457,13 @@ function buildStatement(contactId, from, to){
       }
     }
   });
-  const paidByContact=payments.filter(p=>p.direction==='contact_to_ct').reduce((s,p)=>s+ +p.amount,0);
-  const paidByCT=payments.filter(p=>p.direction==='ct_to_contact').reduce((s,p)=>s+ +p.amount,0);
-  // Net: positive = contact still owes CT, negative = CT still owes contact
+
+  // Old payments still adjust net for backwards compat
+  const paidByContact=oldPayments.filter(p=>p.direction==='contact_to_ct').reduce((s,p)=>s+ +p.amount,0);
+  const paidByCT=oldPayments.filter(p=>p.direction==='ct_to_contact').reduce((s,p)=>s+ +p.amount,0);
   const gross=voucherOwed-voucherWePay-ctCommOwed+ctCommEarned;
   const net=gross+paidByCT-paidByContact;
-  return{rides,payments,totalPrice,ctCommOwed,ctCommEarned,voucherOwed,voucherWePay,subPriceOwed,paidByContact,paidByCT,gross,net};
+  return{rides,settledRideIds,payments,totalPrice,ctCommOwed,ctCommEarned,voucherOwed,voucherWePay,subPriceOwed,paidByContact,paidByCT,gross,net};
 }
 
 function fsel(onChange='render()'){
@@ -1229,7 +1255,7 @@ function buildStmtHTML(){
   const theyDrive=S.rides.filter(r=>(r.supplier_id===stmtContact&&r.client_id==='CT')||(r.is_intermediate&&r.sub_supplier_id===stmtContact));
   const mixed=S.rides.filter(r=>r.client_id!=='CT'&&r.supplier_id!=='CT'&&!r.is_intermediate);
 
-  function rideRow(r, forContactId){
+  function rideRow(r, forContactId, settled=false){
     const isV=r.method==='Voucher (settle later)';
     const isSubV=r.is_intermediate&&r.sub_method==='Voucher (settle later)';
     const isForSubSupplier=r.is_intermediate&&r.sub_supplier_id===forContactId;
@@ -1244,18 +1270,20 @@ function buildStmtHTML(){
     } else {
       effectOnCT=isV?(ctIsSup?+r.price:-r.price):(ctIsSup?(+r.price-(+r.commission||0)):-(+r.commission||0));
     }
-    const effClass=effectOnCT>0?'tok':effectOnCT<0?'terr':'mu';
+    const effClass=settled?'mu':effectOnCT>0?'tok':effectOnCT<0?'terr':'mu';
     const timeStr=r.pickup_time?`<span class="badge b-gr" style="font-size:10px">${r.pickup_time}</span> `:'';
     const intBadge=r.is_intermediate?`<span class="badge b-or" style="font-size:10px">intermed.</span> `:'';
+    const settledBadge=settled?`<span class="badge b-g" style="font-size:10px;margin-left:4px">settled</span>`:'';
     const priceCell=isForSubSupplier?eu(r.sub_price):eu(r.price);
     const commCell=isForSubSupplier?(+r.sub_commission>0?'− '+eu(r.sub_commission):'—'):(+r.commission>0?'− '+eu(r.commission):'—');
-    return`<div class="stmt-row">
+    const rowStyle=settled?'opacity:0.45;':'';
+    return`<div class="stmt-row" style="${rowStyle}">
       <span class="fs12">${r.date}</span>
-      <span style="overflow:hidden;text-overflow:ellipsis">${timeStr}${intBadge}${r.da||''}${r.a?' → '+r.a:''} ${r.passenger?'<span class="mu fs11">('+r.passenger+')</span>':''}</span>
+      <span style="overflow:hidden;text-overflow:ellipsis">${timeStr}${intBadge}${r.da||''}${r.a?' → '+r.a:''} ${r.passenger?'<span class="mu fs11">('+r.passenger+')</span>':''}${settledBadge}</span>
       <span>${bm(isForSubSupplier?(r.sub_method||r.method):r.method,true)}</span>
       <span class="fw6">${priceCell}</span>
       <span class="twarn">${commCell}</span>
-      <span class="fw6 ${effClass}">${effectOnCT>0?'+':''}${eu(effectOnCT)}</span>
+      <span class="fw6 ${effClass}">${settled?'—':((effectOnCT>0?'+':'')+eu(effectOnCT))}</span>
       <span><button class="btn btn-gh btn-xs" onclick="del('rides','${r.id}')">✕</button></span>
     </div>`;
   }
@@ -1274,14 +1302,14 @@ function buildStmtHTML(){
     <div class="stmt-row" style="background:#f8fafc;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mu)">
       <span>Date</span><span>Route / Passenger</span><span>Method</span><span>Price</span><span>Comm.</span><span>CT Effect</span><span></span>
     </div>
-    ${ctDrives.map(r=>rideRow(r,stmtContact)).join('')}`;
+    ${ctDrives.map(r=>rideRow(r,stmtContact,S.settledRideIds.has(r.id))).join('')}`;
   }
   if(theyDrive.length>0){
     html+=`<div class="stmt-section">${contact.name} drives / handles rides for CT (${theyDrive.length} rides)</div>
     <div class="stmt-row" style="background:#f8fafc;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mu)">
       <span>Date</span><span>Route / Passenger</span><span>Method</span><span>Price</span><span>Comm.</span><span>CT Effect</span><span></span>
     </div>
-    ${theyDrive.map(r=>rideRow(r,stmtContact)).join('')}`;
+    ${theyDrive.map(r=>rideRow(r,stmtContact,S.settledRideIds.has(r.id))).join('')}`;
   }
 
   if(S.rides.length===0&&S.payments.length===0){html+=`<div style="padding:16px 20px;color:var(--mu);font-size:13px">No rides or payments recorded for this contact in the selected period.</div>`;}
@@ -1291,9 +1319,12 @@ function buildStmtHTML(){
     S.payments.forEach(p=>{
       const dir=p.direction==='contact_to_ct'?`${contact.name} → CT`:`CT → ${contact.name}`;
       const amt=p.direction==='contact_to_ct'?`<span class="tok fw6">+ ${eu(p.amount)}</span>`:`<span class="terr fw6">− ${eu(p.amount)}</span>`;
+      const periodTag=p.period_from&&p.period_to
+        ?`<span class="badge b-g" style="font-size:10px;margin-left:4px">settles ${p.period_from}→${p.period_to}</span>`
+        :'';
       html+=`<div class="stmt-row">
         <span class="fs12">${p.date}</span>
-        <span>${dir} — ${p.note||'Settlement'}</span>
+        <span>${dir} — ${p.note||'Settlement'}${periodTag}</span>
         <span><span class="badge b-pu">${p.method||'Bank transfer'}</span></span>
         <span>${amt}</span><span></span><span></span>
         <span><button class="btn btn-gh btn-xs" onclick="del('payments','${p.id}')">✕</button></span>
@@ -1315,7 +1346,7 @@ function buildStmtHTML(){
   html+=`
   <div style="background:#f8fafc;border:1px solid var(--bd);border-radius:8px;padding:14px 18px;margin:0 0 2px 0">
     <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--mu);margin-bottom:10px">Payment Type Breakdown</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" class="two-box-grid">
       <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:10px 12px">
         <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#92400e;margin-bottom:6px">🟡 Voucher (Bon)</div>
         <div style="font-size:12px;margin-bottom:3px;display:flex;justify-content:space-between"><span>${contact.name} owes CT (Bon)</span><strong>${eu(S.voucherOwed)}</strong></div>
@@ -1335,7 +1366,7 @@ function buildStmtHTML(){
   <div class="stmt-footer ${ctOwes?'owe':''}">
     <div>
       <div style="font-size:12px;color:var(--mu)">
-        Payments already settled this period: received ${eu(S.paidByContact)} · paid out ${eu(S.paidByCT)}
+        ${S.settledRideIds.size>0?`<span style="color:var(--ok)">✔ ${S.settledRideIds.size} ride${S.settledRideIds.size>1?'s':''} pre-settled (excluded from balance)</span>${S.paidByContact||S.paidByCT?' · ':''}`:''} ${S.paidByContact||S.paidByCT?`Also: received ${eu(S.paidByContact)} · paid out ${eu(S.paidByCT)}`:''}
       </div>
     </div>
     <div style="text-align:right">
@@ -1604,7 +1635,7 @@ function markPaid(contactId,direction,amount){
     direction=confirm(`Did ${contact.name} pay CT?\n\nOK = ${contact.name} paid CT\nCancel = CT paid ${contact.name}`)?'contact_to_ct':'ct_to_contact';
   }
   const note=prompt(`Payment note (optional):`,direction==='contact_to_ct'?`Received from ${contact.name}`:`Paid to ${contact.name}`)||'';
-  const obj={contact_id:contactId,direction,amount:+amt,method:'Bank transfer',note,date:today(),createdAt:Date.now()};
+  const obj={contact_id:contactId,direction,amount:+amt,method:'Bank transfer',note,date:today(),period_from:stmtFrom||null,period_to:stmtTo||null,createdAt:Date.now()};
   db.collection('payments').doc().set(obj).then(()=>{
     document.getElementById('stmt-content').innerHTML=buildStmtHTML();
   }).catch(()=>alert('Error.'));
