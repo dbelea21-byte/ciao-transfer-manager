@@ -74,6 +74,10 @@ textarea{resize:vertical;min-height:56px}
 .filters{display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
 .filters select{width:auto}
 .flbl{font-size:11px;font-weight:700;color:var(--mu)}
+.stat-period{display:flex;align-items:center;gap:14px;flex-wrap:wrap;width:100%}
+.sp-row{display:flex;align-items:center;gap:6px}
+.sp-row select{width:auto}
+.sp-presets{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
 .sep{height:1px;background:var(--bd);margin:12px 0}
 .mt8{margin-top:8px}.mt12{margin-top:12px}
 .fw6{font-weight:600}.fs11{font-size:11px}.fs12{font-size:12px}.fs13{font-size:13px}
@@ -195,6 +199,11 @@ textarea{resize:vertical;min-height:56px}
   .stmt-footer>div:last-child{text-align:left;width:100%}
   .stmt-footer>div:last-child>div:last-child{flex-wrap:wrap;justify-content:flex-start}
   .filters{flex-wrap:wrap;gap:8px}
+  .stat-period{gap:10px}
+  .sp-row{width:100%}
+  .sp-row select{flex:1;min-width:0}
+  .sp-presets{margin-left:0;width:100%}
+  .sp-presets .btn{flex:1;justify-content:center}
   .cal-grid{font-size:10px}
   .cal-day-hdr{padding:5px 2px;font-size:9px}
   .cal-cell{min-height:60px;padding:3px}
@@ -278,6 +287,8 @@ const db = firebase.firestore();
 
 // ── STATE ──────────────────────────────────────────
 let TAB='rides', fM=new Date().getMonth(), fY=new Date().getFullYear();
+// Statistics tab uses an independent month-range (From → To); Rides/Expenses keep the single-month fM/fY
+let sFromM=new Date().getMonth(), sFromY=new Date().getFullYear(), sToM=new Date().getMonth(), sToY=new Date().getFullYear();
 let stmtContact='', stmtM=new Date().getMonth(), stmtY=new Date().getFullYear();
 let stmtFrom='', stmtTo='';
 let ridesSearch='';
@@ -322,6 +333,8 @@ const METH_BADGE={Cash:'b-g',Card:'b-b','Bank transfer':'b-pu','Voucher (settle 
 const eu=n=>'€ '+Number(n||0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,',');
 const today=()=>new Date().toISOString().slice(0,10);
 const inF=d=>{if(!d)return false;const x=new Date(d);return x.getMonth()===fM&&x.getFullYear()===fY};
+// True if date falls within the Statistics month-range [from..to] inclusive (month granularity)
+const inStat=d=>{if(!d)return false;const x=new Date(d);const v=x.getFullYear()*12+x.getMonth();return v>=sFromY*12+sFromM&&v<=sToY*12+sToM};
 const inRange=(d,from,to)=>{if(!d)return false;const x=d;return(!from||x>=from)&&(!to||x<=to)};
 const inPeriod=(d,m,y)=>{if(!d)return false;const x=new Date(d);return x.getMonth()===m&&x.getFullYear()===y};
 const g=id=>{const e=document.getElementById(id);return e?e.value:''};
@@ -470,6 +483,54 @@ function fsel(onChange='render()'){
   return `<span class="flbl">Period:</span>
   <select onchange="fM=+this.value;${onChange}">${MONTHS.map((m,i)=>`<option value="${i}"${i===fM?' selected':''}>${m}</option>`).join('')}</select>
   <select onchange="fY=+this.value;${onChange}">${YEARS().map(y=>`<option value="${y}"${y===fY?' selected':''}>${y}</option>`).join('')}</select>`;
+}
+
+// ── STATISTICS PERIOD (month-range From → To) ──────
+function statLabel(){
+  const sameY=sFromY===sToY, sameM=sFromM===sToM;
+  if(sameY&&sameM)return MONTHS[sFromM]+' '+sFromY;
+  if(sameY&&sFromM===0&&sToM===11)return ''+sFromY;
+  if(sameY)return MONTHS[sFromM].slice(0,3)+'–'+MONTHS[sToM].slice(0,3)+' '+sFromY;
+  return MONTHS[sFromM].slice(0,3)+' '+sFromY+' – '+MONTHS[sToM].slice(0,3)+' '+sToY;
+}
+function statSet(which,val){
+  val=+val;
+  if(which==='fm')sFromM=val;else if(which==='fy')sFromY=val;
+  else if(which==='tm')sToM=val;else if(which==='ty')sToY=val;
+  // Keep From ≤ To: nudge the other end if the range got inverted
+  if(sFromY*12+sFromM>sToY*12+sToM){
+    if(which==='fm'||which==='fy'){sToM=sFromM;sToY=sFromY;}
+    else{sFromM=sToM;sFromY=sToY;}
+  }
+  render();
+}
+function statPreset(p){
+  const now=new Date();
+  if(p==='thismonth'){sFromM=sToM=now.getMonth();sFromY=sToY=now.getFullYear();}
+  else if(p==='thisyear'){sFromM=0;sFromY=now.getFullYear();sToM=now.getMonth();sToY=now.getFullYear();}
+  else if(p==='lastyear'){sFromM=0;sToM=11;sFromY=sToY=now.getFullYear()-1;}
+  render();
+}
+function statRangeSel(){
+  const mOpts=(sel)=>MONTHS.map((m,i)=>`<option value="${i}"${i===sel?' selected':''}>${m}</option>`).join('');
+  const yOpts=(sel)=>YEARS().map(y=>`<option value="${y}"${y===sel?' selected':''}>${y}</option>`).join('');
+  return `<div class="stat-period">
+    <div class="sp-row">
+      <span class="flbl">From</span>
+      <select onchange="statSet('fm',this.value)">${mOpts(sFromM)}</select>
+      <select onchange="statSet('fy',this.value)">${yOpts(sFromY)}</select>
+    </div>
+    <div class="sp-row">
+      <span class="flbl">To</span>
+      <select onchange="statSet('tm',this.value)">${mOpts(sToM)}</select>
+      <select onchange="statSet('ty',this.value)">${yOpts(sToY)}</select>
+    </div>
+    <div class="sp-presets">
+      <button class="btn btn-sec btn-sm" onclick="statPreset('thismonth')">This month</button>
+      <button class="btn btn-sec btn-sm" onclick="statPreset('thisyear')">This year</button>
+      <button class="btn btn-sec btn-sm" onclick="statPreset('lastyear')">Last year</button>
+    </div>
+  </div>`;
 }
 
 function barchart(obj,cls=''){
@@ -1129,9 +1190,9 @@ function saveExpense(){
 
 // ── STATISTICS ─────────────────────────────────────
 function rStats(){
-  const rides=DATA.rides.filter(r=>inF(r.date));
-  const exps=DATA.expenses.filter(s=>inF(s.date));
-  const mn=MONTHS[fM];
+  const rides=DATA.rides.filter(r=>inStat(r.date));
+  const exps=DATA.expenses.filter(s=>inStat(s.date));
+  const mn=statLabel();
   const totEarned=rides.reduce((s,r)=>s+rideEarned(r),0);
   const totCash=rides.reduce((s,r)=>s+rideCashCollected(r),0);
   const totCard=rides.reduce((s,r)=>s+rideCardCollected(r),0);
@@ -1155,7 +1216,7 @@ function rStats(){
   // Monthly
   const monthly=[];
   for(let i=11;i>=0;i--){
-    const d=new Date(fY,fM-i,1);const mm=d.getMonth(),yy=d.getFullYear();
+    const d=new Date(sToY,sToM-i,1);const mm=d.getMonth(),yy=d.getFullYear();
     const ii=DATA.rides.filter(r=>{const dd=new Date(r.date);return dd.getMonth()===mm&&dd.getFullYear()===yy}).reduce((s,r)=>s+rideEarned(r),0);
     const ss=DATA.expenses.filter(r=>{const dd=new Date(r.date);return dd.getMonth()===mm&&dd.getFullYear()===yy}).reduce((s,r)=>s+ +r.amount,0);
     monthly.push({lbl:MONTHS[mm].slice(0,3)+' '+String(yy).slice(2),ii,ss});
@@ -1167,7 +1228,7 @@ function rStats(){
 <div style="background:var(--ok);border-radius:2px 2px 0 0;width:100%;height:${x.ii?Math.max(Math.round(x.ii/maxI*110),3):0}px"></div>
 </div><div style="font-size:9px;color:var(--mu);white-space:nowrap">${x.lbl}</div></div>`).join('');
 
-  return`<div class="filters">${fsel()}</div>
+  return`<div class="filters">${statRangeSel()}</div>
 
 <div class="stat-grid">
   <div class="sc g"><div class="sc-lbl">Total earned ${mn}</div><div class="sc-val">${eu(totEarned)}</div><div class="sc-sub">${rides.length} rides · incl. vouchers</div></div>
