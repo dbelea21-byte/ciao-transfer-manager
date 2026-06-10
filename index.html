@@ -345,6 +345,40 @@ const bm=(m,short=false)=>{
   const label=short?{Cash:'Cash',Card:'Card','Bank transfer':'Bank','Voucher (settle later)':'Voucher','PayPal / Stripe':'PayPal'}[m]||m:m;
   return`<span class="badge ${METH_BADGE[m]||'b-gr'}">${label}</span>`;
 };
+// Short abbreviation of a contact name: "Rome Limo Transfer" → "RLT", "Transfeero" → "TRA"
+const cAbbr=name=>{
+  if(!name)return'?';
+  const words=name.trim().split(/\s+/).filter(Boolean);
+  if(words.length>=2)return words.map(w=>w[0]).join('').toUpperCase().slice(0,4);
+  return name.trim().slice(0,3).toUpperCase();
+};
+// Direction of a ride relative to a contact: who SENT the service to whom.
+// 'ct_to_contact' = CT sent the ride to the contact (contact performs it)
+// 'contact_to_ct' = the contact sent the ride to CT (CT performs it)
+function rideDirection(r,contactId){
+  if(r.is_intermediate){
+    if(r.sub_supplier_id===contactId)return'ct_to_contact';
+    if(r.client_id===contactId)return'contact_to_ct';
+    return null;
+  }
+  if(r.supplier_id===contactId&&r.client_id==='CT')return'ct_to_contact';
+  if(r.supplier_id==='CT'&&r.client_id===contactId)return'contact_to_ct';
+  return null;
+}
+// Plain-text direction label, e.g. "CT → RLT" / "RLT → CT"
+function dirLabel(r,contactId,contactName){
+  const d=rideDirection(r,contactId);if(!d)return'';
+  const ab=cAbbr(contactName);
+  return d==='ct_to_contact'?`CT → ${ab}`:`${ab} → CT`;
+}
+// HTML badge version for the on-screen statement
+function dirBadge(r,contactId,contactName){
+  const d=rideDirection(r,contactId);if(!d)return'';
+  const ab=cAbbr(contactName);
+  return d==='ct_to_contact'
+    ?`<span class="badge b-b" style="font-size:10px" title="CT sent this service to ${contactName}">CT → ${ab}</span> `
+    :`<span class="badge b-g" style="font-size:10px" title="${contactName} sent this service to CT">${ab} → CT</span> `;
+}
 
 // ── CORE FINANCIAL LOGIC ───────────────────────────
 // CT earns = price - commission on ALL rides where CT is supplier (incl. vouchers)
@@ -1333,6 +1367,7 @@ function buildStmtHTML(){
     }
     const effClass=settled?'mu':effectOnCT>0?'tok':effectOnCT<0?'terr':'mu';
     const timeStr=r.pickup_time?`<span class="badge b-gr" style="font-size:10px">${r.pickup_time}</span> `:'';
+    const dirB=dirBadge(r,forContactId,contact.name);
     const intBadge=r.is_intermediate?`<span class="badge b-or" style="font-size:10px">intermed.</span> `:'';
     const settledBadge=settled?`<span class="badge b-g" style="font-size:10px;margin-left:4px">settled</span>`:'';
     const priceCell=isForSubSupplier?eu(r.sub_price):eu(r.price);
@@ -1340,7 +1375,7 @@ function buildStmtHTML(){
     const rowStyle=settled?'opacity:0.45;':'';
     return`<div class="stmt-row" style="${rowStyle}">
       <span class="fs12">${r.date}</span>
-      <span style="overflow:hidden;text-overflow:ellipsis">${timeStr}${intBadge}${r.da||''}${r.a?' → '+r.a:''} ${r.passenger?'<span class="mu fs11">('+r.passenger+')</span>':''}${settledBadge}</span>
+      <span style="overflow:hidden;text-overflow:ellipsis">${dirB}${timeStr}${intBadge}${r.da||''}${r.a?' → '+r.a:''} ${r.passenger?'<span class="mu fs11">('+r.passenger+')</span>':''}${settledBadge}</span>
       <span>${bm(isForSubSupplier?(r.sub_method||r.method):r.method,true)}</span>
       <span class="fw6">${priceCell}</span>
       <span class="twarn">${commCell}</span>
@@ -1536,15 +1571,7 @@ function downloadStmtExcel(){
   const rows=[];
 
   // Header row
-  rows.push(['#','Date','Time','From','To','Passenger','Method','Bon (Voucher)','Cash','Segnata (Comm)','CT Effect']);
-
-  // Direction helper
-  function rowDir(r){
-    if(r.supplier_id==='CT'&&r.client_id===stmtContact) return 'CT drives for '+contact.name;
-    if(r.supplier_id===stmtContact&&r.client_id==='CT') return contact.name+' drives for CT';
-    if(r.is_intermediate) return 'Intermediate';
-    return '';
-  }
+  rows.push(['#','Date','Time','Direction','From','To','Passenger','Method','Bon (Voucher)','Cash','Segnata (Comm)','CT Effect']);
 
   let idx=1;
   S.rides.forEach(r=>{
@@ -1570,7 +1597,7 @@ function downloadStmtExcel(){
 
     const timeStr=r.pickup_time||'';
     const methodShort=r.method==='Voucher (settle later)'?'Voucher':r.method;
-    rows.push([idx++, r.date, timeStr, r.da||'', r.a||'', r.passenger||'', methodShort,
+    rows.push([idx++, r.date, timeStr, dirLabel(r,stmtContact,contact.name), r.da||'', r.a||'', r.passenger||'', methodShort,
       bon===''?'':bon, cash===''?'':cash, comm===''||comm===0?'':comm, effect===''?'':effect]);
   });
 
@@ -1605,7 +1632,7 @@ function downloadStmtExcel(){
 
   const ws=XLSX.utils.aoa_to_sheet(rows);
   // Column widths
-  ws['!cols']=[{wch:4},{wch:26},{wch:8},{wch:22},{wch:22},{wch:22},{wch:14},{wch:14},{wch:10},{wch:14},{wch:12}];
+  ws['!cols']=[{wch:4},{wch:12},{wch:8},{wch:12},{wch:22},{wch:22},{wch:22},{wch:14},{wch:14},{wch:10},{wch:14},{wch:12}];
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Conti '+contact.name);
   XLSX.writeFile(wb,`Conti_${contact.name}_${stmtFrom||'all'}_${stmtTo||'all'}.xlsx`);
@@ -1646,16 +1673,18 @@ function downloadStmtPDF(){
     const isV=r.method==='Voucher (settle later)';
     const ctSup=r.supplier_id==='CT';
     const thSup=r.supplier_id===stmtContact;
+    const dir=dirLabel(r,stmtContact,contact.name);
+    const dirCls=rideDirection(r,stmtContact)==='contact_to_ct'?'tok':'terr';
     let bon='',cash='',comm='';
     if(ctSup&&r.client_id===stmtContact){if(isV)bon=eu(r.price);else{cash=eu(r.price);if(r.commission>0)comm=eu(r.commission);}}
     else if(thSup&&r.client_id==='CT'){if(isV)bon=eu(r.price);else{cash=eu(r.price);if(r.commission>0)comm=eu(r.commission);}}
-    rideRows+=`<tr><td>${i+1}</td><td>${r.date}</td><td>${r.pickup_time||''}</td><td>${r.da||''}</td><td>${r.a||''}</td><td>${r.passenger||''}</td><td>${isV?'Voucher':'Cash'}</td><td class="twarn">${bon}</td><td>${cash}</td><td class="terr">${comm}</td></tr>`;
+    rideRows+=`<tr><td>${i+1}</td><td>${r.date}</td><td>${r.pickup_time||''}</td><td style="white-space:nowrap;font-weight:600" class="${dirCls}">${dir}</td><td>${r.da||''}</td><td>${r.a||''}</td><td>${r.passenger||''}</td><td>${isV?'Voucher':'Cash'}</td><td class="twarn">${bon}</td><td>${cash}</td><td class="terr">${comm}</td></tr>`;
   });
 
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Ciao Transfer — ${contact.name} Statement</title>${printCSS}</head><body>
   <h2>Ciao Transfer — Statement: ${contact.name}</h2>
   <div class="mu">${mn} · ${S.rides.length} rides</div>
-  <table><thead><tr><th>#</th><th>Date</th><th>Time</th><th>From</th><th>To</th><th>Passenger</th><th>Method</th><th>Bon</th><th>Cash</th><th>Comm</th></tr></thead><tbody>${rideRows}</tbody></table>
+  <table><thead><tr><th>#</th><th>Date</th><th>Time</th><th>Dir</th><th>From</th><th>To</th><th>Passenger</th><th>Method</th><th>Bon</th><th>Cash</th><th>Comm</th></tr></thead><tbody>${rideRows}</tbody></table>
   <div class="section">Payment Type Breakdown</div>
   <div class="breakdown">
     <div class="box">
