@@ -396,12 +396,16 @@ function rideEarned(r){
 function rideCashCollected(r){
   if(r.method!=='Cash') return 0;
   if(!r.is_intermediate&&r.supplier_id!=='CT'&&!(+r.outsourced_cost>0)) return 0;
+  // Intermediate: if client pays cash directly to sub-supplier, CT never holds that money
+  if(r.is_intermediate&&r.sub_method==='Cash') return 0;
+  // Intermediate: if client pays CT by cash, CT collects full price then pays sub-supplier
   return +r.price;
 }
 // Card CT collected physically
 function rideCardCollected(r){
   if(r.method!=='Card') return 0;
   if(!r.is_intermediate&&r.supplier_id!=='CT'&&!(+r.outsourced_cost>0)) return 0;
+  // Intermediate: if client pays card to CT, CT collects; regardless of how CT pays sub-supplier
   return +r.price;
 }
 // Voucher amount pending bank transfer (CT is supplier)
@@ -1231,10 +1235,8 @@ function rStats(){
   const totCash=rides.reduce((s,r)=>s+rideCashCollected(r),0);
   const totCard=rides.reduce((s,r)=>s+rideCardCollected(r),0);
   const totVoucher=rides.reduce((s,r)=>s+rideVoucherPending(r),0);
-  const interSubExp=rides.filter(r=>r.is_intermediate&&+r.sub_price>0).reduce((s,r)=>s+ +r.sub_price,0);
-  const totExp=exps.reduce((s,x)=>s+ +x.amount,0)+interSubExp;
+  const totExp=exps.reduce((s,x)=>s+ +x.amount,0);
   const netProfit=totEarned-totExp;
-  const totCommOwed=rides.filter(r=>r.supplier_id==='CT').reduce((s,r)=>s+(+r.commission||0),0);
 
   // By source (client)
   const byClient={};
@@ -1246,7 +1248,6 @@ function rStats(){
   // By expense category
   const byExp={};
   exps.forEach(s=>{byExp[s.cat]=(byExp[s.cat]||0)+ +s.amount});
-  rides.filter(r=>r.is_intermediate&&+r.sub_price>0).forEach(r=>{byExp['Sub-supplier payments']=(byExp['Sub-supplier payments']||0)+ +r.sub_price;});
   // Monthly
   const monthly=[];
   for(let i=11;i>=0;i--){
@@ -1268,7 +1269,6 @@ function rStats(){
   <div class="sc g"><div class="sc-lbl">Total earned ${mn}</div><div class="sc-val">${eu(totEarned)}</div><div class="sc-sub">${rides.length} rides · incl. vouchers</div></div>
   <div class="sc r"><div class="sc-lbl">Expenses ${mn}</div><div class="sc-val">${eu(totExp)}</div></div>
   <div class="sc ${netProfit>=0?'g':'r'}"><div class="sc-lbl">Net profit</div><div class="sc-val">${eu(netProfit)}</div></div>
-  <div class="sc a"><div class="sc-lbl">Commission owed to clients</div><div class="sc-val">${eu(totCommOwed)}</div></div>
 </div>
 
 <div class="two">
@@ -1277,7 +1277,6 @@ function rStats(){
     <div class="info-row"><span>Cash collected (gross)</span><span class="fw6 tok">${eu(totCash)}</span></div>
     <div class="info-row"><span>Card collected (gross)</span><span class="fw6 tpr">${eu(totCard)}</span></div>
     <div class="info-row"><span>Vouchers pending (bank transfer)</span><span class="fw6 twarn">${eu(totVoucher)}</span></div>
-    <div class="info-row"><span>Commissions owed to clients</span><span class="fw6 terr">− ${eu(totCommOwed)}</span></div>
     <div class="info-row" style="border-top:2px solid var(--bd);margin-top:4px;padding-top:10px"><span class="fw6">Net earned (all sources)</span><span class="fw6 tok" style="font-size:15px">${eu(totEarned)}</span></div>
   </div>
   <div class="card">
