@@ -1659,7 +1659,6 @@ function downloadStmtPDF(){
     .final-val{font-size:20px;font-weight:700}
     .tok{color:#16a34a}.terr{color:#dc2626}.twarn{color:#d97706}
     .mu{color:#64748b}
-    .tag-int{display:inline-block;margin-left:5px;padding:1px 5px;border-radius:3px;background:#ffedd5;color:#c2410c;font-size:9px;font-weight:700;text-transform:uppercase}
     .tag-set{display:inline-block;margin-left:4px;padding:1px 5px;border-radius:3px;background:#dcfce7;color:#15803d;font-size:9px;font-weight:700;text-transform:uppercase}
     .row-settled td{opacity:.5}
     @media print{@page{margin:15mm}}
@@ -1701,11 +1700,10 @@ function downloadStmtPDF(){
     const comm=commVal>0?'\u2212 '+eu(commVal):'\u2014';
     const effCls=settled?'mu':effectOnCT>0?'tok':effectOnCT<0?'terr':'mu';
     const effTxt=settled?'\u2014':((effectOnCT>0?'+':'')+eu(effectOnCT));
-    const intTag=r.is_intermediate?'<span class="tag-int">intermed.</span>':'';
     const setTag=settled?'<span class="tag-set">settled</span>':'';
     const rowCls=settled?' class="row-settled"':'';
 
-    rideRows+=`<tr${rowCls}><td>${i+1}</td><td>${r.date}</td><td>${r.pickup_time||''}</td><td style="white-space:nowrap;font-weight:600" class="${dirCls}">${dir}</td><td>${r.da||''}</td><td>${r.a||''}</td><td>${r.passenger||''}${intTag}${setTag}</td><td>${isV?'Voucher':'Cash'}</td><td class="twarn">${bon}</td><td>${cash}</td><td class="terr">${comm}</td><td class="${effCls}" style="font-weight:700;white-space:nowrap">${effTxt}</td></tr>`;
+    rideRows+=`<tr${rowCls}><td>${i+1}</td><td>${r.date}</td><td>${r.pickup_time||''}</td><td style="white-space:nowrap;font-weight:600" class="${dirCls}">${dir}</td><td>${r.da||''}</td><td>${r.a||''}</td><td>${r.passenger||''}${setTag}</td><td>${isV?'Voucher':'Cash'}</td><td class="twarn">${bon}</td><td>${cash}</td><td class="terr">${comm}</td><td class="${effCls}" style="font-weight:700;white-space:nowrap">${effTxt}</td></tr>`;
   });
 
   let payRows='';
