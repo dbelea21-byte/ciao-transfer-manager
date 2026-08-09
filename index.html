@@ -472,6 +472,8 @@ function rideInvoiceSettled(r){
 // FATTURATO = gross the client pays CT, whatever CT's own margin is.
 function rideFatturato(r){
   const gross=+r.price||0;
+  if(r.fatt_override==='yes') return gross;        // set per ride (deposits)
+  if(r.fatt_override==='no')  return 0;
   if(!ctHoldsClientMoney(r)&&!r.is_intermediate) return 0;
   if(r.method==='Card'||r.method==='Bank transfer') return ctHoldsClientMoney(r)?gross:0;
   if(isVoucherM(r.method)){
@@ -486,6 +488,25 @@ function rideGrossFromClient(r){
   return +r.price||0;
 }
 function ctDroveIt(r){return r.supplier_id==='CT'&&!r.is_intermediate;}
+// ── BOOKING COUNT ──────────────────────────────────
+// One job can be entered as several ride records (a deposit plus the balance).
+// Two records collapse into one booking when the passenger name AND the
+// itinerary AND the date all match. Same name, different itinerary = 2 bookings.
+function bookingKey(r){
+  const norm=v=>(v||'').trim().toLowerCase().replace(/\s+/g,' ');
+  return norm(r.passenger)+'|'+norm(r.da)+'|'+norm(r.a)+'|'+(r.date||'');
+}
+function uniqueBookings(rides){
+  const seen=new Set(),out=[];
+  rides.forEach(r=>{
+    if(r.is_deposit) return;                       // explicit part payment
+    if(!(r.passenger||'').trim()){out.push(r);return;}  // no name: cannot match, keep
+    const k=bookingKey(r);
+    if(seen.has(k))return;
+    seen.add(k);out.push(r);
+  });
+  return out;
+}
 
 // ── CONTACT BALANCE ────────────────────────────────
 // positive = contact owes CT | negative = CT owes contact
@@ -1039,6 +1060,17 @@ function editRide(id){
 </div>
 <div class="fg mt8">
   <div class="fgroup"><label class="fl">Passenger name</label><input type="text" id="f-pax" value="${r.passenger||''}"></div>
+  <div class="fgroup" style="grid-column:1/-1">
+    <label class="chk"><input type="checkbox" id="f-deposit" ${r.is_deposit?'checked':''} onchange="document.getElementById('f-fattrow').style.display=this.checked?'block':'none'"> <strong>Part payment / deposit</strong> — same job as another record, do not count as a separate booking</label>
+    <div id="f-fattrow" style="display:${r.is_deposit?'block':'none'};margin-top:8px">
+      <label class="fl">Counts as Fatturato?</label>
+      <select id="f-fatt">
+        <option value=""${!r.fatt_override?' selected':''}>Automatic (by payment method)</option>
+        <option value="yes"${r.fatt_override==='yes'?' selected':''}>Yes — include in Fatturato</option>
+        <option value="no"${r.fatt_override==='no'?' selected':''}>No — not Fatturato</option>
+      </select>
+    </div>
+  </div>
   <div class="fgroup"><label class="fl">Notes</label><input type="text" id="f-note" value="${r.note||''}"></div>
 </div>
 <div class="mf"><button class="btn btn-sec" onclick="closeM()">Cancel</button><button class="btn btn-pr" onclick="saveRide('${id||''}')">Save ride</button></div>`,true);
@@ -1156,6 +1188,8 @@ function saveRide(id){
     vehicle:document.getElementById('f-veh').value,
     driver_id:document.getElementById('f-drv').value||null,
     passenger:g('f-pax'), note:g('f-note'),
+    is_deposit:document.getElementById('f-deposit')?.checked||false,
+    fatt_override:document.getElementById('f-fatt')?.value||null,
     createdAt:DATA.rides.find(x=>x.id===id)?.createdAt||Date.now()};
   const rideRef=id?db.collection('rides').doc(id):db.collection('rides').doc();
   rideRef.set(obj).then(()=>{
@@ -1314,7 +1348,9 @@ function rStats(){
   const totSegCash=rides.reduce((s,r)=>s+rideSegnataInCash(r),0);
   const totVoucher=rides.reduce((s,r)=>s+rideVoucherNet(r),0);
   const totFatt=rides.reduce((s,r)=>s+rideFatturato(r),0);
-  const nCT=rides.filter(ctDroveIt).length, nPartner=rides.length-nCT;
+  const bookings=uniqueBookings(rides);
+  const nCT=bookings.filter(ctDroveIt).length, nPartner=bookings.length-nCT;
+  const nMerged=rides.length-bookings.length;
   const CEIL=85000, fattYear=DATA.rides.filter(r=>(r.date||'').slice(0,4)===String(new Date().getFullYear())).reduce((s,r)=>s+rideFatturato(r),0);
   const ceilPct=Math.min(Math.round(fattYear/CEIL*100),100);
   const totExp=exps.reduce((s,x)=>s+ +x.amount,0);
@@ -1348,7 +1384,7 @@ function rStats(){
   return`<div class="filters">${statRangeSel()}</div>
 
 <div class="stat-grid">
-  <div class="sc g"><div class="sc-lbl">Total earned ${mn}</div><div class="sc-val">${eu(totEarned)}</div><div class="sc-sub">${rides.length} bookings · ${nCT} driven by CT · ${nPartner} by partners</div></div>
+  <div class="sc g"><div class="sc-lbl">Total earned ${mn}</div><div class="sc-val">${eu(totEarned)}</div><div class="sc-sub">${bookings.length} bookings · ${nCT} driven by CT · ${nPartner} by partners${nMerged>0?` · ${nMerged} part payment${nMerged>1?'s':''} merged`:''}</div></div>
   <div class="sc r"><div class="sc-lbl">Expenses ${mn}</div><div class="sc-val">${eu(totExp)}</div></div>
   <div class="sc ${netProfit>=0?'g':'r'}"><div class="sc-lbl">Net profit</div><div class="sc-val">${eu(netProfit)}</div></div>
 </div>
@@ -1359,7 +1395,7 @@ function rStats(){
     <div class="info-row"><span>Cash collected (net in pocket)</span><span class="fw6 tok">${eu(totCash)}</span></div>
     <div class="info-row"><span>Card collected (gross)</span><span class="fw6 tpr">${eu(totCard)}</span></div>
     ${totSegCash>0?`<div class="info-row" style="padding-left:18px"><span class="mu fs12">of which segnate paid back in cash</span><span class="fw6 terr fs12">\u2212 ${eu(totSegCash)}</span></div>`:''}
-    ${totPP>0?`<div class="info-row"><span>PayPal / Stripe (net)</span><span class="fw6 tpr">${eu(totPP)}</span></div>`:''}
+    <div class="info-row"><span>PayPal / Stripe (net)</span><span class="fw6 tpr">${eu(totPP)}</span></div>
     <div class="info-row"><span>Voucher / bank transfer (net)</span><span class="fw6 twarn">${eu(totVoucher)}</span></div>
     <div class="info-row" style="border-top:2px solid var(--bd);margin-top:4px;padding-top:10px"><span class="fw6">Net earned (all sources)</span><span class="fw6 tok" style="font-size:15px">${eu(totCash+totPP+totCard-totSegCash+totVoucher)}</span></div>
     <div class="mu" style="font-size:11px;padding:6px 0 0">Cash and voucher are net of what you pay partners; card stays gross with the segnata shown beneath.</div>
@@ -1484,10 +1520,12 @@ function buildCTStmtHTML(){
   const vou=rides.reduce((s,r)=>s+rideVoucherNet(r),0);
   const fatt=rides.reduce((s,r)=>s+rideFatturato(r),0);
   const earned=rides.reduce((s,r)=>s+rideEarned(r),0);
-  const nCT=rides.filter(ctDroveIt).length;
+  const bookings=uniqueBookings(rides);
+  const nCT=bookings.filter(ctDroveIt).length;
+  const nMerged=rides.length-bookings.length;
   const rowsHTML=rides.map(r=>`<div class="stmt-row" style="grid-template-columns:75px minmax(0,1fr) 110px 90px 90px 90px">
     <span class="fs12">${r.date}</span>
-    <span style="overflow:hidden;text-overflow:ellipsis">${r.pickup_time?`<span class="badge b-gr" style="font-size:10px">${r.pickup_time}</span> `:''}${r.da||''}${r.a?' \u2192 '+r.a:''} ${r.passenger?'<span class="mu fs11">('+r.passenger+')</span>':''}</span>
+    <span style="overflow:hidden;text-overflow:ellipsis">${r.pickup_time?`<span class="badge b-gr" style="font-size:10px">${r.pickup_time}</span> `:''}${r.is_deposit?'<span class="badge b-or" style="font-size:10px">deposit</span> ':''}${r.da||''}${r.a?' \u2192 '+r.a:''} ${r.passenger?'<span class="mu fs11">('+r.passenger+')</span>':''}</span>
     <span>${bm(r.method,true)}</span>
     <span class="fw6">${eu(+r.price||0)}</span>
     <span class="fw6 tok">${eu(rideEarned(r))}</span>
@@ -1495,14 +1533,14 @@ function buildCTStmtHTML(){
   </div>`).join('');
   return`<div class="stmt-head">
     <div class="stmt-title">Ciao Transfer \u2014 own rides</div>
-    <div class="mu fs12">${from} \u2192 ${to} \u00b7 ${rides.length} bookings \u00b7 ${nCT} driven by CT \u00b7 ${rides.length-nCT} by partners</div>
+    <div class="mu fs12">${from} \u2192 ${to} \u00b7 ${bookings.length} bookings \u00b7 ${nCT} driven by CT \u00b7 ${bookings.length-nCT} by partners${nMerged>0?` \u00b7 ${nMerged} part payment${nMerged>1?'s':''} merged`:''}</div>
   </div>
   <div class="stmt-section">Money collected</div>
   <div style="padding:4px 20px 12px">
     <div class="info-row"><span>Cash (net in pocket)</span><span class="fw6 tok">${eu(cash)}</span></div>
     <div class="info-row"><span>Card (gross)</span><span class="fw6 tpr">${eu(card)}</span></div>
     ${seg>0?`<div class="info-row" style="padding-left:18px"><span class="mu fs12">of which segnate paid back in cash</span><span class="fw6 terr fs12">\u2212 ${eu(seg)}</span></div>`:''}
-    ${pp>0?`<div class="info-row"><span>PayPal / Stripe (net)</span><span class="fw6 tpr">${eu(pp)}</span></div>`:''}
+    <div class="info-row"><span>PayPal / Stripe (net)</span><span class="fw6 tpr">${eu(pp)}</span></div>
     <div class="info-row"><span>Voucher / bank transfer (net)</span><span class="fw6 twarn">${eu(vou)}</span></div>
     <div class="info-row" style="border-top:2px solid var(--bd);padding-top:10px"><span class="fw6">Net earned</span><span class="fw6 tok" style="font-size:15px">${eu(earned)}</span></div>
     <div class="info-row"><span class="fw6">Fatturato</span><span class="fw6 tpr" style="font-size:15px">${eu(fatt)}</span></div>
