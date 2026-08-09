@@ -415,6 +415,78 @@ function rideVoucherPending(r){
   return +r.price - (+r.commission||0);
 }
 
+// ── FINANCIAL CORE v2 (spec 9 Aug 2026) ────────────
+// Three ledgers kept strictly apart:
+//   CASSA     - what money physically moved and in what form
+//   GUADAGNO  - what CT actually earned (rideEarned, above)
+//   FATTURATO - invoiced turnover, counted by RIDE DATE
+const FATT_START='2026-08-01';   // invoice classification starts here
+function isVoucherM(m){return m==='Voucher (settle later)';}
+// Who physically holds the client's money for this ride?
+// Intermediate + non-voucher sub_method  => the sub-supplier collected it.
+function ctHoldsClientMoney(r){
+  if(r.is_intermediate) return !(r.sub_method&&!isVoucherM(r.sub_method));
+  return r.supplier_id==='CT';
+}
+// Segnata CT pays a partner out of pocket, on a ride collected BY CARD.
+// Only these become expenses - on cash rides the segnata is already netted off.
+function rideSegnataInCash(r){
+  if(r.method!=='Card'||!ctHoldsClientMoney(r)) return 0;
+  if(r.is_intermediate||r.supplier_id!=='CT'||r.client_id==='CT') return 0;
+  return +r.commission||0;
+}
+function _netCollected(r){
+  let out=0;
+  if(!r.is_intermediate&&r.supplier_id==='CT'&&r.client_id!=='CT') out=+r.commission||0;
+  return (+r.price||0)-out;
+}
+function rideCashNet(r){
+  if(r.method!=='Cash'||!ctHoldsClientMoney(r)) return 0;
+  return _netCollected(r);
+}
+function ridePaypalNet(r){
+  if(r.method!=='PayPal / Stripe'||!ctHoldsClientMoney(r)) return 0;
+  return _netCollected(r);
+}
+function rideCardGross(r){
+  if(r.method!=='Card'||!ctHoldsClientMoney(r)) return 0;
+  return +r.price||0;
+}
+function rideVoucherNet(r){
+  if(!isVoucherM(r.method)) return 0;
+  if(r.is_intermediate) return (+r.price||0)-(+r.commission||0)-(+r.sub_price||0);
+  if(r.supplier_id!=='CT') return 0;
+  return (+r.price||0)-(+r.commission||0);
+}
+function contactAlwaysInvoice(id){
+  const c=DATA.contacts.find(x=>x.id===id); return !!(c&&c.always_invoice);
+}
+// Is this ride covered by a settlement the user marked "with invoice"?
+function rideInvoiceSettled(r){
+  if(!r.date||r.date<FATT_START) return false;
+  const cid=r.client_id&&r.client_id!=='CT'?r.client_id:(r.supplier_id&&r.supplier_id!=='CT'?r.supplier_id:null);
+  if(!cid) return false;
+  return DATA.payments.some(p=>p.contact_id===cid&&p.settle_method==='invoice'&&(
+    (p.period_from&&p.period_to)?(r.date>=p.period_from&&r.date<=p.period_to):(p.date===r.date)));
+}
+// FATTURATO = gross the client pays CT, whatever CT's own margin is.
+function rideFatturato(r){
+  const gross=+r.price||0;
+  if(!ctHoldsClientMoney(r)&&!r.is_intermediate) return 0;
+  if(r.method==='Card'||r.method==='Bank transfer') return ctHoldsClientMoney(r)?gross:0;
+  if(isVoucherM(r.method)){
+    if(r.client_id&&r.client_id!=='CT'&&contactAlwaysInvoice(r.client_id)) return gross;
+    return rideInvoiceSettled(r)?gross:0;
+  }
+  return rideInvoiceSettled(r)?gross:0;   // Cash / PayPal: only if invoiced
+}
+// Gross the client company paid CT (for the by-source chart)
+function rideGrossFromClient(r){
+  if(r.client_id==='CT') return r.supplier_id==='CT'?(+r.price||0):0;
+  return +r.price||0;
+}
+function ctDroveIt(r){return r.supplier_id==='CT'&&!r.is_intermediate;}
+
 // ── CONTACT BALANCE ────────────────────────────────
 // positive = contact owes CT | negative = CT owes contact
 function rawBalance(contactId, rides){
@@ -683,6 +755,7 @@ function editContact(id){
 <div class="sep"></div>
 <label class="chk"><input type="checkbox" id="f-iscl" ${c.is_client?'checked':''}> <strong>Client</strong> — sends rides to Ciao Transfer</label>
 <label class="chk mt8"><input type="checkbox" id="f-issu" ${c.is_supplier?'checked':''}> <strong>Supplier</strong> — receives rides from Ciao Transfer</label>
+<label class="chk mt8"><input type="checkbox" id="f-alwinv" ${c.always_invoice?'checked':''}> <strong>Always settles by invoice</strong> — counts straight into Fatturato on the ride date</label>
 <p class="mu fs12" style="margin-top:8px;padding:8px;background:#f8fafc;border-radius:6px">Example: <em>Welcome Pickups</em> = Client only. <em>Rome Limo Transfer</em> = Client + Supplier.</p>
 <div class="fgroup mt8"><label class="fl">Notes</label><textarea id="f-note">${c.note||''}</textarea></div>
 <div class="mf"><button class="btn btn-sec" onclick="closeM()">Cancel</button><button class="btn btn-pr" onclick="saveContact('${id||''}')">Save</button></div>`);
@@ -692,7 +765,8 @@ function saveContact(id){
   const is_client=document.getElementById('f-iscl').checked;
   const is_supplier=document.getElementById('f-issu').checked;
   if(!is_client&&!is_supplier)return alert('Select at least one role.');
-  const obj={name,piva:g('f-piva'),tel:g('f-tel'),email:g('f-email'),note:g('f-note'),is_client,is_supplier,createdAt:DATA.contacts.find(x=>x.id===id)?.createdAt||Date.now()};
+  const always_invoice=document.getElementById('f-alwinv').checked;
+  const obj={name,piva:g('f-piva'),tel:g('f-tel'),email:g('f-email'),note:g('f-note'),is_client,is_supplier,always_invoice,createdAt:DATA.contacts.find(x=>x.id===id)?.createdAt||Date.now()};
   (id?db.collection('contacts').doc(id):db.collection('contacts').doc()).set(obj).then(closeM).catch(()=>alert('Error.'));
 }
 
@@ -1101,15 +1175,17 @@ function saveRide(id){
 // ── EXPENSES ───────────────────────────────────────
 function rExpenses(){
   const list=DATA.expenses.filter(s=>inF(s.date)).sort((a,b)=>b.date>a.date?1:-1);
-  const interRides=DATA.rides.filter(r=>inF(r.date)&&r.is_intermediate&&+r.sub_price>0);
+  // Only segnate CT owes partners on CARD-collected rides become expenses.
+  // Voucher sub-prices are already netted off in the voucher figure - never here.
+  const interRides=DATA.rides.filter(r=>inF(r.date)&&rideSegnataInCash(r)>0);
   const tot=list.reduce((s,x)=>s+ +x.amount,0);
-  const totInter=interRides.reduce((s,r)=>s+ +r.sub_price,0);
+  const totInter=interRides.reduce((s,r)=>s+rideSegnataInCash(r),0);
   const grandTot=tot+totInter;
 
   // Category icons
   const CAT_ICON={'Fuel':'⛽','Motorway / Tolls':'🛣️','ZTL Ticket':'🎫','Car wash':'🚿','Insurance':'🛡️',
     'Maintenance / Mechanic':'🔧','Tyres':'🔄','Parking':'🅿️','Accountant':'📋',
-    'Software / Subscriptions':'💻','Meals / Travel':'🍽️','Other':'📦','Sub-supplier payment':'🚗'};
+    'Software / Subscriptions':'💻','Meals / Travel':'🍽️','Other':'📦','Sub-supplier payment':'🚗','Segnate paid to partners':'🤝'};
 
   // Group regular expenses by category
   const groups={};
@@ -1121,13 +1197,13 @@ function rExpenses(){
 
   // Add sub-supplier payments as a group
   if(interRides.length>0){
-    groups['Sub-supplier payment']={
+    groups['Segnate paid to partners']={
       items:interRides.map(r=>({
         id:'ride_'+r.id,
         date:r.date,
-        amount:+r.sub_price,
-        desc:`Paid to ${cN(r.sub_supplier_id)}${r.da?' — '+r.da+(r.a?' → '+r.a:''):''}${r.pickup_time?' @ '+r.pickup_time:''}${r.passenger?' ('+r.passenger+')':''}`,
-        note:r.sub_method||'',
+        amount:rideSegnataInCash(r),
+        desc:`Segnata to ${cN(r.client_id)}${r.da?' — '+r.da+(r.a?' → '+r.a:''):''}${r.pickup_time?' @ '+r.pickup_time:''}${r.passenger?' ('+r.passenger+')':''}`,
+        note:'card ride, segnata paid in cash',
         isAuto:true,
         rideId:r.id
       })),
@@ -1232,15 +1308,21 @@ function rStats(){
   const exps=DATA.expenses.filter(s=>inStat(s.date));
   const mn=statLabel();
   const totEarned=rides.reduce((s,r)=>s+rideEarned(r),0);
-  const totCash=rides.reduce((s,r)=>s+rideCashCollected(r),0);
-  const totCard=rides.reduce((s,r)=>s+rideCardCollected(r),0);
-  const totVoucher=rides.reduce((s,r)=>s+rideVoucherPending(r),0);
+  const totCash=rides.reduce((s,r)=>s+rideCashNet(r),0);
+  const totPP=rides.reduce((s,r)=>s+ridePaypalNet(r),0);
+  const totCard=rides.reduce((s,r)=>s+rideCardGross(r),0);
+  const totSegCash=rides.reduce((s,r)=>s+rideSegnataInCash(r),0);
+  const totVoucher=rides.reduce((s,r)=>s+rideVoucherNet(r),0);
+  const totFatt=rides.reduce((s,r)=>s+rideFatturato(r),0);
+  const nCT=rides.filter(ctDroveIt).length, nPartner=rides.length-nCT;
+  const CEIL=85000, fattYear=DATA.rides.filter(r=>(r.date||'').slice(0,4)===String(new Date().getFullYear())).reduce((s,r)=>s+rideFatturato(r),0);
+  const ceilPct=Math.min(Math.round(fattYear/CEIL*100),100);
   const totExp=exps.reduce((s,x)=>s+ +x.amount,0);
   const netProfit=totEarned-totExp;
 
   // By source (client)
   const byClient={};
-  rides.filter(r=>r.supplier_id==='CT').forEach(r=>{const k=cN(r.client_id);byClient[k]=(byClient[k]||0)+rideEarned(r);});
+  rides.forEach(r=>{const v=rideGrossFromClient(r);if(v)  {const k=cN(r.client_id);byClient[k]=(byClient[k]||0)+v;}});
   // By method
   const byMeth={};
   rides.filter(r=>r.supplier_id==='CT'&&r.method!=='Voucher (settle later)').forEach(r=>{byMeth[r.method]=(byMeth[r.method]||0)+ +r.price;});
@@ -1266,7 +1348,7 @@ function rStats(){
   return`<div class="filters">${statRangeSel()}</div>
 
 <div class="stat-grid">
-  <div class="sc g"><div class="sc-lbl">Total earned ${mn}</div><div class="sc-val">${eu(totEarned)}</div><div class="sc-sub">${rides.length} rides · incl. vouchers</div></div>
+  <div class="sc g"><div class="sc-lbl">Total earned ${mn}</div><div class="sc-val">${eu(totEarned)}</div><div class="sc-sub">${rides.length} bookings · ${nCT} driven by CT · ${nPartner} by partners</div></div>
   <div class="sc r"><div class="sc-lbl">Expenses ${mn}</div><div class="sc-val">${eu(totExp)}</div></div>
   <div class="sc ${netProfit>=0?'g':'r'}"><div class="sc-lbl">Net profit</div><div class="sc-val">${eu(netProfit)}</div></div>
 </div>
@@ -1274,10 +1356,13 @@ function rStats(){
 <div class="two">
   <div class="card">
     <div class="ch"><span class="ct">Cash &amp; card breakdown — ${mn}</span></div>
-    <div class="info-row"><span>Cash collected (gross)</span><span class="fw6 tok">${eu(totCash)}</span></div>
+    <div class="info-row"><span>Cash collected (net in pocket)</span><span class="fw6 tok">${eu(totCash)}</span></div>
     <div class="info-row"><span>Card collected (gross)</span><span class="fw6 tpr">${eu(totCard)}</span></div>
-    <div class="info-row"><span>Vouchers pending (bank transfer)</span><span class="fw6 twarn">${eu(totVoucher)}</span></div>
-    <div class="info-row" style="border-top:2px solid var(--bd);margin-top:4px;padding-top:10px"><span class="fw6">Net earned (all sources)</span><span class="fw6 tok" style="font-size:15px">${eu(totEarned)}</span></div>
+    ${totSegCash>0?`<div class="info-row" style="padding-left:18px"><span class="mu fs12">of which segnate paid back in cash</span><span class="fw6 terr fs12">\u2212 ${eu(totSegCash)}</span></div>`:''}
+    ${totPP>0?`<div class="info-row"><span>PayPal / Stripe (net)</span><span class="fw6 tpr">${eu(totPP)}</span></div>`:''}
+    <div class="info-row"><span>Voucher / bank transfer (net)</span><span class="fw6 twarn">${eu(totVoucher)}</span></div>
+    <div class="info-row" style="border-top:2px solid var(--bd);margin-top:4px;padding-top:10px"><span class="fw6">Net earned (all sources)</span><span class="fw6 tok" style="font-size:15px">${eu(totCash+totPP+totCard-totSegCash+totVoucher)}</span></div>
+    <div class="mu" style="font-size:11px;padding:6px 0 0">Cash and voucher are net of what you pay partners; card stays gross with the segnata shown beneath.</div>
   </div>
   <div class="card">
     <div class="ch"><span class="ct">Earnings by source — ${mn}</span></div>
@@ -1285,6 +1370,18 @@ function rStats(){
     <div class="sep"></div>
     <div class="info-row mu fs12"><span>Go to Statements for full contact detail</span><button class="btn btn-sec btn-sm" onclick="go('statements')">Open Statements →</button></div>
   </div>
+</div>
+
+<div class="card">
+  <div class="ch"><span class="ct">Fatturato — ${mn}</span></div>
+  <div class="info-row"><span>Card payments (gross)</span><span class="fw6 tpr">${eu(rides.reduce((s,r)=>s+(r.method==='Card'?rideFatturato(r):0),0))}</span></div>
+  <div class="info-row"><span>Invoiced agencies &amp; invoice-settled rides</span><span class="fw6 tpr">${eu(totFatt-rides.reduce((s,r)=>s+(r.method==='Card'?rideFatturato(r):0),0))}</span></div>
+  <div class="info-row" style="border-top:2px solid var(--bd);margin-top:4px;padding-top:10px"><span class="fw6">Fatturato ${mn}</span><span class="fw6 tpr" style="font-size:15px">${eu(totFatt)}</span></div>
+  <div style="margin-top:12px">
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--mu);margin-bottom:4px"><span>Forfettario ceiling ${new Date().getFullYear()}</span><span class="fw6">${eu(fattYear)} / ${eu(CEIL)}</span></div>
+    <div style="height:10px;background:#eef2f7;border-radius:5px;overflow:hidden"><div style="height:100%;width:${ceilPct}%;background:${ceilPct>=90?'var(--err)':ceilPct>=70?'var(--warn)':'var(--ok)'}"></div></div>
+  </div>
+  <div class="mu" style="font-size:11px;margin-top:8px">Counted by ride date. Cash and PayPal are excluded unless the settlement was marked "with invoice"; invoice classification starts 1 Aug 2026. Check the figure with your commercialista before relying on it.</div>
 </div>
 
 <div class="card">
@@ -1315,6 +1412,7 @@ function rStatements(){
 
   const stmtSel=`<select id="stmt-contact" onchange="stmtContact=this.value;document.getElementById('stmt-content').innerHTML=buildStmtHTML()">
     <option value="">— select a contact —</option>
+    <option value="CT"${stmtContact==='CT'?' selected':''}>\u2605 Ciao Transfer — own rides</option>
     ${contactList.map(c=>`<option value="${c.id}"${stmtContact===c.id?' selected':''}>${c.name}</option>`).join('')}
   </select>`;
 
@@ -1375,7 +1473,49 @@ function stmtRideView(r,contactId,contactName){
     commCell:(isV||!(segnata>0))?'\u2014':eu(segnata)};
 }
 
+// ── CIAO TRANSFER OWN-RIDES PANEL ──────────────────
+function buildCTStmtHTML(){
+  const from=stmtFrom,to=stmtTo;
+  const rides=DATA.rides.filter(r=>inRange(r.date,from,to)).sort((a,b)=>a.date>b.date?1:-1);
+  const cash=rides.reduce((s,r)=>s+rideCashNet(r),0);
+  const card=rides.reduce((s,r)=>s+rideCardGross(r),0);
+  const pp=rides.reduce((s,r)=>s+ridePaypalNet(r),0);
+  const seg=rides.reduce((s,r)=>s+rideSegnataInCash(r),0);
+  const vou=rides.reduce((s,r)=>s+rideVoucherNet(r),0);
+  const fatt=rides.reduce((s,r)=>s+rideFatturato(r),0);
+  const earned=rides.reduce((s,r)=>s+rideEarned(r),0);
+  const nCT=rides.filter(ctDroveIt).length;
+  const rowsHTML=rides.map(r=>`<div class="stmt-row" style="grid-template-columns:75px minmax(0,1fr) 110px 90px 90px 90px">
+    <span class="fs12">${r.date}</span>
+    <span style="overflow:hidden;text-overflow:ellipsis">${r.pickup_time?`<span class="badge b-gr" style="font-size:10px">${r.pickup_time}</span> `:''}${r.da||''}${r.a?' \u2192 '+r.a:''} ${r.passenger?'<span class="mu fs11">('+r.passenger+')</span>':''}</span>
+    <span>${bm(r.method,true)}</span>
+    <span class="fw6">${eu(+r.price||0)}</span>
+    <span class="fw6 tok">${eu(rideEarned(r))}</span>
+    <span class="fw6 tpr">${rideFatturato(r)?eu(rideFatturato(r)):'\u2014'}</span>
+  </div>`).join('');
+  return`<div class="stmt-head">
+    <div class="stmt-title">Ciao Transfer \u2014 own rides</div>
+    <div class="mu fs12">${from} \u2192 ${to} \u00b7 ${rides.length} bookings \u00b7 ${nCT} driven by CT \u00b7 ${rides.length-nCT} by partners</div>
+  </div>
+  <div class="stmt-section">Money collected</div>
+  <div style="padding:4px 20px 12px">
+    <div class="info-row"><span>Cash (net in pocket)</span><span class="fw6 tok">${eu(cash)}</span></div>
+    <div class="info-row"><span>Card (gross)</span><span class="fw6 tpr">${eu(card)}</span></div>
+    ${seg>0?`<div class="info-row" style="padding-left:18px"><span class="mu fs12">of which segnate paid back in cash</span><span class="fw6 terr fs12">\u2212 ${eu(seg)}</span></div>`:''}
+    ${pp>0?`<div class="info-row"><span>PayPal / Stripe (net)</span><span class="fw6 tpr">${eu(pp)}</span></div>`:''}
+    <div class="info-row"><span>Voucher / bank transfer (net)</span><span class="fw6 twarn">${eu(vou)}</span></div>
+    <div class="info-row" style="border-top:2px solid var(--bd);padding-top:10px"><span class="fw6">Net earned</span><span class="fw6 tok" style="font-size:15px">${eu(earned)}</span></div>
+    <div class="info-row"><span class="fw6">Fatturato</span><span class="fw6 tpr" style="font-size:15px">${eu(fatt)}</span></div>
+  </div>
+  <div class="stmt-section">All bookings in this period (${rides.length})</div>
+  <div class="stmt-row" style="grid-template-columns:75px minmax(0,1fr) 110px 90px 90px 90px;background:#f8fafc;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--mu)">
+    <span>Date</span><span>Route / Passenger</span><span>Method</span><span>Price</span><span>Earned</span><span>Fatturato</span>
+  </div>
+  ${rowsHTML||'<div style="padding:16px 20px;color:var(--mu);font-size:13px">No rides in this period.</div>'}`;
+}
+
 function buildStmtHTML(){
+  if(stmtContact==='CT') return buildCTStmtHTML();
   if(!stmtContact)return`<div class="empty"><div class="empty-t">Select a contact above</div><div class="mu fs12">All contacts are listed — choose one to see rides, payments and balance for the selected period</div></div>`;
   const contact=DATA.contacts.find(x=>x.id===stmtContact);
   if(!contact)return'';
@@ -1493,8 +1633,10 @@ function buildStmtHTML(){
         ${contactOwes?contact.name+' owes CT '+eu(netAmt):ctOwes?'CT owes '+contact.name+' '+eu(netAmt):'All settled ✔'}
       </div>
       <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end;flex-wrap:wrap">
-        ${contactOwes?`<button class="btn btn-ok btn-sm" onclick="markPaid('${stmtContact}','contact_to_ct',${netAmt.toFixed(2)})">Mark as received from ${contact.name}</button>`:''}
-        ${ctOwes?`<button class="btn btn-warn btn-sm" onclick="markPaid('${stmtContact}','ct_to_contact',${netAmt.toFixed(2)})">Mark as paid to ${contact.name}</button>`:''}
+        ${contactOwes?`<button class="btn btn-ok btn-sm" onclick="markPaid('${stmtContact}','contact_to_ct',${netAmt.toFixed(2)},'cash')">Received in cash</button>
+        <button class="btn btn-ok btn-sm" onclick="markPaid('${stmtContact}','contact_to_ct',${netAmt.toFixed(2)},'invoice')">Received with invoice</button>`:''}
+        ${ctOwes?`<button class="btn btn-warn btn-sm" onclick="markPaid('${stmtContact}','ct_to_contact',${netAmt.toFixed(2)},'cash')">Paid in cash</button>
+        <button class="btn btn-warn btn-sm" onclick="markPaid('${stmtContact}','ct_to_contact',${netAmt.toFixed(2)},'invoice')">Paid with invoice</button>`:''}
         <button class="btn btn-sec btn-sm" onclick="markPaid('${stmtContact}','custom',0)">Record custom payment</button>
         <button class="btn btn-sec btn-sm" onclick="downloadStmtExcel()" title="Download Excel">⬇ Excel</button>
         <button class="btn btn-sec btn-sm" onclick="downloadStmtPDF()" title="Download PDF">⬇ PDF</button>
@@ -1734,7 +1876,7 @@ function toggleSidebar(){
   document.getElementById('sb-overlay').classList.toggle('open');
 }
 
-function markPaid(contactId,direction,amount){
+function markPaid(contactId,direction,amount,settle){
   const contact=DATA.contacts.find(x=>x.id===contactId);
   let amt=amount;
   if(direction==='custom'){
@@ -1745,7 +1887,9 @@ function markPaid(contactId,direction,amount){
     direction=confirm(`Did ${contact.name} pay CT?\n\nOK = ${contact.name} paid CT\nCancel = CT paid ${contact.name}`)?'contact_to_ct':'ct_to_contact';
   }
   const note=prompt(`Payment note (optional):`,direction==='contact_to_ct'?`Received from ${contact.name}`:`Paid to ${contact.name}`)||'';
-  const obj={contact_id:contactId,direction,amount:+amt,method:'Bank transfer',note,date:today(),period_from:stmtFrom||null,period_to:stmtTo||null,createdAt:Date.now()};
+  let sm=settle;
+  if(!sm){ sm=confirm(`How was this settled?\n\nOK = with invoice (counts as Fatturato)\nCancel = in cash (not Fatturato)`)?'invoice':'cash'; }
+  const obj={contact_id:contactId,direction,amount:+amt,method:sm==='invoice'?'Invoice':'Cash',settle_method:sm,note,date:today(),period_from:stmtFrom||null,period_to:stmtTo||null,createdAt:Date.now()};
   db.collection('payments').doc().set(obj).then(()=>{
     document.getElementById('stmt-content').innerHTML=buildStmtHTML();
   }).catch(()=>alert('Error.'));
