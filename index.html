@@ -422,6 +422,15 @@ function rideVoucherPending(r){
 //   FATTURATO - invoiced turnover, counted by RIDE DATE
 const FATT_START='2026-08-01';   // invoice classification starts here
 function isVoucherM(m){return m==='Voucher (settle later)';}
+// ── DEPOSIT (part payment taken by CT on the same ride record) ──
+// The deposit is ALWAYS money CT holds, whoever collects the balance.
+function rideDeposit(r){const d=+r.deposit||0;return d>0?d:0;}
+function rideDepositMethod(r){return r.deposit_method||'Card';}
+// Balance = what is still collected at the ride itself (by CT or by the partner)
+function rideBalance(r){return (+r.price||0)-rideDeposit(r);}
+// What a partner should owe CT once it has collected the balance
+function expectedSegnata(r){return rideBalance(r)-(+r.sub_price||0);}
+
 // Who physically holds the client's money for this ride?
 // Intermediate + non-voucher sub_method  => the sub-supplier collected it.
 function ctHoldsClientMoney(r){
@@ -438,25 +447,37 @@ function rideSegnataInCash(r){
 function _netCollected(r){
   let out=0;
   if(!r.is_intermediate&&r.supplier_id==='CT'&&r.client_id!=='CT') out=+r.commission||0;
-  return (+r.price||0)-out;
+  return rideBalance(r)-out;
 }
 function rideCashNet(r){
-  if(r.method!=='Cash'||!ctHoldsClientMoney(r)) return 0;
-  return _netCollected(r);
+  let v=0;
+  if(r.method==='Cash'&&ctHoldsClientMoney(r)) v+=_netCollected(r);
+  if(rideDeposit(r)>0&&rideDepositMethod(r)==='Cash') v+=rideDeposit(r);
+  return v;
 }
 function ridePaypalNet(r){
-  if(r.method!=='PayPal / Stripe'||!ctHoldsClientMoney(r)) return 0;
-  return _netCollected(r);
+  let v=0;
+  if(r.method==='PayPal / Stripe'&&ctHoldsClientMoney(r)) v+=_netCollected(r);
+  if(rideDeposit(r)>0&&rideDepositMethod(r)==='PayPal / Stripe') v+=rideDeposit(r);
+  return v;
 }
 function rideCardGross(r){
-  if(r.method!=='Card'||!ctHoldsClientMoney(r)) return 0;
-  return +r.price||0;
+  let v=0;
+  if(r.method==='Card'&&ctHoldsClientMoney(r)) v+=rideBalance(r);
+  if(rideDeposit(r)>0&&rideDepositMethod(r)==='Card') v+=rideDeposit(r);
+  return v;
+}
+// Segnata a partner collected on CT's behalf and hands over in cash.
+function rideSegnataReceivedCash(r){
+  if(!r.is_intermediate) return 0;
+  if(!r.sub_method||isVoucherM(r.sub_method)) return 0;
+  return +r.sub_commission||0;
 }
 function rideVoucherNet(r){
   if(!isVoucherM(r.method)) return 0;
-  if(r.is_intermediate) return (+r.price||0)-(+r.commission||0)-(+r.sub_price||0);
+  if(r.is_intermediate) return rideBalance(r)-(+r.commission||0)-(+r.sub_price||0);
   if(r.supplier_id!=='CT') return 0;
-  return (+r.price||0)-(+r.commission||0);
+  return rideBalance(r)-(+r.commission||0);
 }
 function contactAlwaysInvoice(id){
   const c=DATA.contacts.find(x=>x.id===id); return !!(c&&c.always_invoice);
@@ -470,17 +491,31 @@ function rideInvoiceSettled(r){
     (p.period_from&&p.period_to)?(r.date>=p.period_from&&r.date<=p.period_to):(p.date===r.date)));
 }
 // FATTURATO = gross the client pays CT, whatever CT's own margin is.
+// Deposit and balance are judged separately: a card deposit is fatturato even
+// when the balance is paid in cash or collected by a partner.
+function _fattBalance(r){
+  const bal=rideBalance(r);
+  if(bal<=0) return 0;
+  if(!ctHoldsClientMoney(r)&&!r.is_intermediate) return 0;
+  if(r.method==='Card'||r.method==='Bank transfer') return ctHoldsClientMoney(r)?bal:0;
+  if(isVoucherM(r.method)){
+    if(r.client_id&&r.client_id!=='CT'&&contactAlwaysInvoice(r.client_id)) return bal;
+    return rideInvoiceSettled(r)?bal:0;
+  }
+  return rideInvoiceSettled(r)?bal:0;     // Cash / PayPal: only if invoiced
+}
+function _fattDeposit(r){
+  const dep=rideDeposit(r);
+  if(dep<=0) return 0;
+  const m=rideDepositMethod(r);
+  if(m==='Card'||m==='Bank transfer') return dep;
+  return rideInvoiceSettled(r)?dep:0;
+}
 function rideFatturato(r){
   const gross=+r.price||0;
-  if(r.fatt_override==='yes') return gross;        // set per ride (deposits)
+  if(r.fatt_override==='yes') return gross;        // set per ride (legacy deposits)
   if(r.fatt_override==='no')  return 0;
-  if(!ctHoldsClientMoney(r)&&!r.is_intermediate) return 0;
-  if(r.method==='Card'||r.method==='Bank transfer') return ctHoldsClientMoney(r)?gross:0;
-  if(isVoucherM(r.method)){
-    if(r.client_id&&r.client_id!=='CT'&&contactAlwaysInvoice(r.client_id)) return gross;
-    return rideInvoiceSettled(r)?gross:0;
-  }
-  return rideInvoiceSettled(r)?gross:0;   // Cash / PayPal: only if invoiced
+  return _fattBalance(r)+_fattDeposit(r);
 }
 // Gross the client company paid CT (for the by-source chart)
 function rideGrossFromClient(r){
@@ -669,6 +704,15 @@ function barchart(obj,cls=''){
   if(!ent.length)return`<p class="mu fs12">No data for this period</p>`;
   const mx=Math.max(...ent.map(x=>x[1]),1);
   return`<div class="bar-list">${ent.map(([k,v])=>`<div class="br"><div class="bl" title="${k}">${k}</div><div class="bt"><div class="bf ${cls}" style="width:${(v/mx*100).toFixed(1)}%"></div></div><div class="bv">${eu(v)}</div></div>`).join('')}</div>`;
+}
+
+// Share list: same look as barchart but with the % of the period total
+function pctchart(obj,total,cls=''){
+  const ent=Object.entries(obj).filter(x=>Math.abs(x[1])>0.005).sort((a,b)=>b[1]-a[1]);
+  if(!ent.length)return`<p class="mu fs12">No data for this period</p>`;
+  const mx=Math.max(...ent.map(x=>Math.abs(x[1])),1);
+  const pc=v=>total?(v/total*100):0;
+  return`<div class="bar-list">${ent.map(([k,v])=>`<div class="br"><div class="bl" title="${k}">${k}</div><div class="bt"><div class="bf ${cls}" style="width:${(Math.abs(v)/mx*100).toFixed(1)}%"></div></div><div class="bv" style="min-width:130px;text-align:right">${eu(v)} <span class="fw6" style="color:var(--pr)">· ${pc(v).toFixed(1)}%</span></div></div>`).join('')}</div>`;
 }
 
 // ── NAV ────────────────────────────────────────────
@@ -1026,6 +1070,23 @@ function editRide(id){
   </div>
 </div>
 
+<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:11px;margin:11px 0">
+  <label class="chk"><input type="checkbox" id="f-hasdep" ${(+r.deposit>0)?'checked':''} onchange="updSummary()"> <strong>Deposit received</strong> — part of the price already paid to CT in advance</label>
+  <div class="fg" id="dep-row" style="display:${(+r.deposit>0)?'grid':'none'};margin-top:9px">
+    <div class="fgroup">
+      <label class="fl">Deposit amount (€)</label>
+      <input type="number" id="f-dep" min="0" step="0.01" value="${r.deposit||''}" placeholder="0.00" oninput="updSummary()">
+    </div>
+    <div class="fgroup">
+      <label class="fl">Deposit payment method</label>
+      <select id="f-dep-method" onchange="updSummary()">${METHODS.filter(m=>m!=='Voucher (settle later)').map(m=>`<option${(r.deposit_method||'Card')===m?' selected':''}>${m}</option>`).join('')}</select>
+    </div>
+    <div class="fgroup" style="grid-column:1/-1">
+      <span class="mu fs11">Price received stays the FULL price. The deposit is always CT money; the balance is what is collected at the ride, by CT or by the partner.</span>
+    </div>
+  </div>
+</div>
+
 <div id="inter-section" style="display:${isI?'block':'none'}">
   <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px;margin:10px 0">
     <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#9a3412;margin-bottom:10px">Intermediate: CT passes ride to sub-supplier</div>
@@ -1087,6 +1148,9 @@ function updSummary(){
   const subPrice=parseFloat(g('f-sub-price'))||0;
   const subMethod=g('f-sub-method');
   const subComm=parseFloat(g('f-sub-comm'))||0;
+  const hasDep=document.getElementById('f-hasdep')?.checked||false;
+  const dep=hasDep?(parseFloat(g('f-dep'))||0):0;
+  const depMethod=g('f-dep-method')||'Card';
   const isSubV=subMethod==='Voucher (settle later)';
   const ssid=g('f-ss');
   const el=document.getElementById('ride-sum');
@@ -1094,6 +1158,8 @@ function updSummary(){
   const interSec=document.getElementById('inter-section');
   const sSec=document.getElementById('f-supplier-grp');
   const subCg=document.getElementById('sub-comm-grp');
+  const depRow=document.getElementById('dep-row');
+  if(depRow)depRow.style.display=hasDep?'grid':'none';
   if(cg)cg.style.display=isV?'none':'flex';
   if(interSec)interSec.style.display=isI?'block':'none';
   if(sSec)sSec.style.display=isI?'none':'flex';
@@ -1113,6 +1179,10 @@ function updSummary(){
   let rows=`<div class="sr"><span>Client</span><span class="badge b-b">${cn}</span></div>`;
   rows+=`<div class="sr"><span>${isI?'Sub-supplier (actual driver)':'Supplier'}</span><span class="badge b-pu">${sn}</span></div>`;
   rows+=`<div class="sr"><span>Price received from client</span><span class="fw6">${eu(price)}</span></div>`;
+  if(dep>0){
+    rows+=`<div class="sr"><span>Deposit already received by CT</span><span class="tok fw6">${eu(dep)} · ${depMethod}</span></div>`;
+    rows+=`<div class="sr"><span>Balance collected at the ride</span><span class="fw6">${eu(price-dep)}</span></div>`;
+  }
   if(!isV&&comm>0)rows+=`<div class="sr"><span>Commission owed to ${cn}</span><span class="twarn fw6">− ${eu(comm)}</span></div>`;
   if(isV)rows+=`<div class="sr"><span>Client payment</span><span class="badge b-a">Voucher — bank transfer</span></div>`;
   if(!isI&&sid!=='CT'&&outsourcedCost>0)rows+=`<div class="sr"><span>Price paid to ${sn}</span><span class="terr fw6">− ${eu(outsourcedCost)}</span></div>`;
@@ -1122,6 +1192,12 @@ function updSummary(){
     if(!isSubV&&subComm>0)rows+=`<div class="sr"><span>Sub-supplier commission to CT</span><span class="tok fw6">+ ${eu(subComm)}</span></div>`;
   }
   rows+=`<div class="sr"><span>CT net earnings</span><span class="tok fw6">${eu(earned)}${isV?' (incl. pending)':''}</span></div>`;
+  if(isI&&!isSubV&&subPrice>0){
+    const expSeg=price-dep-subPrice;
+    if(Math.abs(expSeg-subComm)>0.005){
+      rows+=`<div class="sr" style="background:#fff7ed;border-radius:6px;padding:6px 8px"><span class="twarn fs12">⚠ Check the numbers: ${sn} collects ${eu(price-dep)} and keeps ${eu(subPrice)}, so the commission should be ${eu(expSeg)} — you typed ${eu(subComm)}</span><span></span></div>`;
+    }
+  }
   el.style.display='block';
   el.className='ride-summary'+(isV||isSubV?' warn':'');
   el.innerHTML=rows;
@@ -1133,6 +1209,14 @@ function isAirportPickup(da){
   if(!da) return false;
   const s=da.toLowerCase();
   return s.includes('fco')||s.includes('fiumicino');
+}
+// The €2 parking is a real cost ONLY when a Ciao Transfer car goes to the airport.
+// A deposit-only record, an intermediate ride and an outsourced ride cost nothing.
+function rideNeedsParking(r){
+  if(!isAirportPickup(r.da)) return false;
+  if(r.is_deposit) return false;          // legacy part-payment record
+  if(r.is_intermediate) return false;     // a partner drives it
+  return r.supplier_id==='CT';            // not outsourced
 }
 
 function autoAddParking(rideId, date){
@@ -1148,8 +1232,16 @@ function autoAddParking(rideId, date){
 }
 
 function backfillParkingExpenses(){
-  const airportRides=DATA.rides.filter(r=>isAirportPickup(r.da));
-  let added=0;
+  const airportRides=DATA.rides.filter(rideNeedsParking);
+  let added=0, removed=0;
+  // Clean up parking auto-added to rides that should never have had it
+  DATA.expenses.filter(e=>e.auto_parking).forEach(e=>{
+    const rr=DATA.rides.find(x=>x.id===e.ride_id);
+    if(!rr||!rideNeedsParking(rr)){
+      db.collection('expenses').doc(e.id).delete();
+      removed++;
+    }
+  });
   airportRides.forEach(r=>{
     const already=DATA.expenses.find(e=>e.auto_parking&&e.ride_id===r.id);
     if(!already){
@@ -1162,7 +1254,7 @@ function backfillParkingExpenses(){
       added++;
     }
   });
-  return{total:airportRides.length, added};
+  return{total:airportRides.length, added, removed};
 }
 
 function saveRide(id){
@@ -1188,17 +1280,19 @@ function saveRide(id){
     vehicle:document.getElementById('f-veh').value,
     driver_id:document.getElementById('f-drv').value||null,
     passenger:g('f-pax'), note:g('f-note'),
+    deposit:(document.getElementById('f-hasdep')?.checked?(+(document.getElementById('f-dep')?.value)||0):0),
+    deposit_method:(document.getElementById('f-hasdep')?.checked?(document.getElementById('f-dep-method')?.value||'Card'):null),
     is_deposit:document.getElementById('f-deposit')?.checked||false,
     fatt_override:document.getElementById('f-fatt')?.value||null,
     createdAt:DATA.rides.find(x=>x.id===id)?.createdAt||Date.now()};
   const rideRef=id?db.collection('rides').doc(id):db.collection('rides').doc();
   rideRef.set(obj).then(()=>{
-    // Auto-add €2 parking for airport pickups
-    if(isAirportPickup(obj.da)){
+    // Auto-add €2 parking only when a CT car really goes to the airport
+    if(rideNeedsParking(obj)){
       autoAddParking(rideRef.id, obj.date);
-    } else if(id){
-      // If edited and 'from' changed away from airport, remove auto parking
-      const old=DATA.expenses.find(e=>e.auto_parking&&e.ride_id===id);
+    } else {
+      // deposit record, intermediate ride, outsourced ride or no longer FCO
+      const old=DATA.expenses.find(e=>e.auto_parking&&e.ride_id===rideRef.id);
       if(old) db.collection('expenses').doc(old.id).delete();
     }
     closeM();
@@ -1306,10 +1400,10 @@ ${groupsHTML}`;
 }
 
 function runBackfill(){
-  if(!confirm('This will scan ALL your rides and add a €2 parking expense for every pickup from FCO/Fiumicino that does not already have one.\n\nMake sure you have deleted your manually added parking tickets first!\n\nContinue?')) return;
+  if(!confirm('This will scan ALL your rides.\n\n• adds a €2 parking expense for every FCO/Fiumicino pickup DRIVEN BY CT that does not have one\n• removes the €2 parking from deposit records and from rides passed to a partner\n\nMake sure you have deleted your manually added parking tickets first!\n\nContinue?')) return;
   const result=backfillParkingExpenses();
   setTimeout(()=>{
-    alert('Done!\n\n'+result.total+' airport pickup rides found.\n'+result.added+' new parking entries added (€'+result.added*2+').\nAlready existed: '+(result.total-result.added)+'.');
+    alert('Done!\n\n'+result.total+' airport pickups driven by CT.\n'+result.added+' new parking entries added (€'+result.added*2+').\n'+result.removed+' wrong parking entries removed (€'+result.removed*2+').');
   },500);
 }
 
@@ -1346,6 +1440,7 @@ function rStats(){
   const totPP=rides.reduce((s,r)=>s+ridePaypalNet(r),0);
   const totCard=rides.reduce((s,r)=>s+rideCardGross(r),0);
   const totSegCash=rides.reduce((s,r)=>s+rideSegnataInCash(r),0);
+  const totSegRecv=rides.reduce((s,r)=>s+rideSegnataReceivedCash(r),0);
   const totVoucher=rides.reduce((s,r)=>s+rideVoucherNet(r),0);
   const totFatt=rides.reduce((s,r)=>s+rideFatturato(r),0);
   const bookings=uniqueBookings(rides);
@@ -1356,9 +1451,12 @@ function rStats(){
   const totExp=exps.reduce((s,x)=>s+ +x.amount,0);
   const netProfit=totEarned-totExp;
 
-  // By source (client)
+  // By source (client) — gross received from each company
   const byClient={};
   rides.forEach(r=>{const v=rideGrossFromClient(r);if(v)  {const k=cN(r.client_id);byClient[k]=(byClient[k]||0)+v;}});
+  // Share of earnings by source — nets exactly to Total earned
+  const byEarn={};
+  rides.forEach(r=>{const v=rideEarned(r);if(v){const k=cN(r.client_id);byEarn[k]=(byEarn[k]||0)+v;}});
   // By method
   const byMeth={};
   rides.filter(r=>r.supplier_id==='CT'&&r.method!=='Voucher (settle later)').forEach(r=>{byMeth[r.method]=(byMeth[r.method]||0)+ +r.price;});
@@ -1393,12 +1491,13 @@ function rStats(){
   <div class="card">
     <div class="ch"><span class="ct">Cash &amp; card breakdown — ${mn}</span></div>
     <div class="info-row"><span>Cash collected (net in pocket)</span><span class="fw6 tok">${eu(totCash)}</span></div>
+    ${totSegRecv>0?`<div class="info-row" style="padding-left:18px"><span class="mu fs12">+ segnate to collect from partners in cash</span><span class="fw6 tok fs12">${eu(totSegRecv)}</span></div>`:''}
     <div class="info-row"><span>Card collected (gross)</span><span class="fw6 tpr">${eu(totCard)}</span></div>
     ${totSegCash>0?`<div class="info-row" style="padding-left:18px"><span class="mu fs12">of which segnate paid back in cash</span><span class="fw6 terr fs12">\u2212 ${eu(totSegCash)}</span></div>`:''}
     <div class="info-row"><span>PayPal / Stripe (net)</span><span class="fw6 tpr">${eu(totPP)}</span></div>
     <div class="info-row"><span>Voucher / bank transfer (net)</span><span class="fw6 twarn">${eu(totVoucher)}</span></div>
-    <div class="info-row" style="border-top:2px solid var(--bd);margin-top:4px;padding-top:10px"><span class="fw6">Net earned (all sources)</span><span class="fw6 tok" style="font-size:15px">${eu(totCash+totPP+totCard-totSegCash+totVoucher)}</span></div>
-    <div class="mu" style="font-size:11px;padding:6px 0 0">Cash and voucher are net of what you pay partners; card stays gross with the segnata shown beneath.</div>
+    <div class="info-row" style="border-top:2px solid var(--bd);margin-top:4px;padding-top:10px"><span class="fw6">Net earned (all sources)</span><span class="fw6 tok" style="font-size:15px">${eu(totCash+totSegRecv+totPP+totCard-totSegCash+totVoucher)}</span></div>
+    <div class="mu" style="font-size:11px;padding:6px 0 0">Cash and voucher are net of what you pay partners; card stays gross with the segnata shown beneath. Segnate from partner-driven rides are counted at the ride date, before the partner actually hands the money over.</div>
   </div>
   <div class="card">
     <div class="ch"><span class="ct">Earnings by source — ${mn}</span></div>
@@ -1406,6 +1505,13 @@ function rStats(){
     <div class="sep"></div>
     <div class="info-row mu fs12"><span>Go to Statements for full contact detail</span><button class="btn btn-sec btn-sm" onclick="go('statements')">Open Statements →</button></div>
   </div>
+</div>
+
+<div class="card">
+  <div class="ch"><span class="ct">Share of earnings — ${mn}</span></div>
+  ${pctchart(byEarn,totEarned,'tpr')}
+  <div class="info-row" style="border-top:2px solid var(--bd);margin-top:6px;padding-top:10px"><span class="fw6">Total earned ${mn}</span><span class="fw6 tok" style="font-size:15px">${eu(totEarned)} · 100%</span></div>
+  <div class="mu" style="font-size:11px;padding:6px 0 0">What each company contributed to your earnings, so the percentages add up to 100%. The chart above shows the gross received instead, which is larger because part of it goes back out to partners.</div>
 </div>
 
 <div class="card">
@@ -1483,7 +1589,7 @@ function stmtRideView(r,contactId,contactName){
   const isSub=r.is_intermediate&&r.sub_supplier_id===contactId;
   const method=isSub?(r.sub_method||r.method):r.method;
   const isV=method==='Voucher (settle later)';
-  const total=+r.price||0;
+  const total=rideBalance(r);   // the deposit stayed with CT: the partner never handled it
   let cut=0,segnata=0,contactDrives=false;
   if(isSub){                                   // CT sent the ride, contact drove it
     contactDrives=true;
@@ -1517,6 +1623,7 @@ function buildCTStmtHTML(){
   const card=rides.reduce((s,r)=>s+rideCardGross(r),0);
   const pp=rides.reduce((s,r)=>s+ridePaypalNet(r),0);
   const seg=rides.reduce((s,r)=>s+rideSegnataInCash(r),0);
+  const segRecv=rides.reduce((s,r)=>s+rideSegnataReceivedCash(r),0);
   const vou=rides.reduce((s,r)=>s+rideVoucherNet(r),0);
   const fatt=rides.reduce((s,r)=>s+rideFatturato(r),0);
   const earned=rides.reduce((s,r)=>s+rideEarned(r),0);
@@ -1538,6 +1645,7 @@ function buildCTStmtHTML(){
   <div class="stmt-section">Money collected</div>
   <div style="padding:4px 20px 12px">
     <div class="info-row"><span>Cash (net in pocket)</span><span class="fw6 tok">${eu(cash)}</span></div>
+    ${segRecv>0?`<div class="info-row" style="padding-left:18px"><span class="mu fs12">+ segnate to collect from partners in cash</span><span class="fw6 tok fs12">${eu(segRecv)}</span></div>`:''}
     <div class="info-row"><span>Card (gross)</span><span class="fw6 tpr">${eu(card)}</span></div>
     ${seg>0?`<div class="info-row" style="padding-left:18px"><span class="mu fs12">of which segnate paid back in cash</span><span class="fw6 terr fs12">\u2212 ${eu(seg)}</span></div>`:''}
     <div class="info-row"><span>PayPal / Stripe (net)</span><span class="fw6 tpr">${eu(pp)}</span></div>
