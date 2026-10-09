@@ -324,6 +324,8 @@ db.collection('company').doc('info').onSnapshot(s=>{if(s.exists)DATA.company=s.d
 const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const YEARS=()=>{const a=[];for(let y=new Date().getFullYear();y>=2023;y--)a.push(y);return a};
 const METHODS=['Cash','Card','Bank transfer','Voucher (settle later)','PayPal / Stripe'];
+const SOURCES=['Search engine (Google, Bing…)','Google Ad','AI assistant (ChatGPT, Gemini…)','Tripadvisor / Viator','Friends or family','Returning client','Other','Unknown'];
+const CHANNELS=['Website','Email','WhatsApp','Other'];
 const VEHICLES=['Business Sedan (1–3 pax)','Standard Minivan (up to 8 pax)','Business Minivan (up to 7 pax)'];
 const EXP_CATS=['Fuel','Motorway / Tolls','ZTL Ticket','Car wash','Insurance','Maintenance / Mechanic','Tyres','Parking','Accountant','Software / Subscriptions','Meals / Travel','Other'];
 const TABS={company:'Company Info',drivers:'Drivers',contacts:'Contacts',rides:'Rides',expenses:'Expenses',stats:'Statistics',statements:'Statements'};
@@ -523,6 +525,21 @@ function rideGrossFromClient(r){
   return +r.price||0;
 }
 function ctDroveIt(r){return r.supplier_id==='CT'&&!r.is_intermediate;}
+// ── CIAO TRANSFER OWN BOOKINGS (client = CT: site, email, WhatsApp) ──
+// Gross = full price of every own booking. Net = rideEarned, split three ways:
+//   direct   - rides CT operates itself
+//   deposit  - deposit CT kept on a ride sent to a partner
+//   partner  - what is left of CT's earning on a partner ride (the segnata / margin)
+function ownBreakdown(rides){
+  const o={gross:0,grossCT:0,grossP:0,direct:0,deposit:0,partner:0,net:0,list:[]};
+  rides.filter(r=>r.client_id==='CT').forEach(r=>{
+    const price=+r.price||0, earned=rideEarned(r);
+    o.gross+=price; o.net+=earned; o.list.push(r);
+    if(ctDroveIt(r)){o.grossCT+=price;o.direct+=earned;}
+    else{const dep=Math.min(rideDeposit(r),Math.max(earned,0));o.grossP+=price;o.deposit+=dep;o.partner+=earned-dep;}
+  });
+  return o;
+}
 // ── BOOKING COUNT ──────────────────────────────────
 // One job can be entered as several ride records (a deposit plus the balance).
 // Two records collapse into one booking when the passenger name AND the
@@ -712,7 +729,7 @@ function pctchart(obj,total,cls=''){
   if(!ent.length)return`<p class="mu fs12">No data for this period</p>`;
   const mx=Math.max(...ent.map(x=>Math.abs(x[1])),1);
   const pc=v=>total?(v/total*100):0;
-  return`<div class="bar-list">${ent.map(([k,v])=>`<div class="br"><div class="bl" title="${k}">${k}</div><div class="bt"><div class="bf ${cls}" style="width:${(Math.abs(v)/mx*100).toFixed(1)}%"></div></div><div class="bv" style="min-width:130px;text-align:right">${eu(v)} <span class="fw6" style="color:var(--pr)">· ${pc(v).toFixed(1)}%</span></div></div>`).join('')}</div>`;
+  return`<div class="bar-list">${ent.map(([k,v])=>`<div class="br" style="grid-template-columns:minmax(80px,140px) minmax(0,1fr) 155px"><div class="bl" title="${k}">${k}</div><div class="bt"><div class="bf ${cls}" style="width:${(Math.abs(v)/mx*100).toFixed(1)}%"></div></div><div class="bv" style="text-align:right;white-space:nowrap">${eu(v)} <span class="fw6" style="color:var(--pr)">· ${pc(v).toFixed(1)}%</span></div></div>`).join('')}</div>`;
 }
 
 // ── NAV ────────────────────────────────────────────
@@ -1111,6 +1128,18 @@ function editRide(id){
   </div>
 </div>
 
+<div class="fg" id="src-row" style="display:${r.client_id==='CT'?'grid':'none'};background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:11px;margin:11px 0">
+  <div class="fgroup">
+    <label class="fl">How did the client find us?</label>
+    <select id="f-source"><option value="">— not set —</option>${SOURCES.map(x=>`<option${r.source===x?' selected':''}>${x}</option>`).join('')}</select>
+  </div>
+  <div class="fgroup">
+    <label class="fl">Booked via</label>
+    <select id="f-channel"><option value="">— not set —</option>${CHANNELS.map(x=>`<option${r.channel===x?' selected':''}>${x}</option>`).join('')}</select>
+  </div>
+  <div class="fgroup" style="grid-column:1/-1"><span class="mu fs11">Website bookings: copy the answer from the booking record ("How did you hear about us?").</span></div>
+</div>
+
 <div id="ride-sum" style="display:none"></div>
 <div class="sep"></div>
 <div class="fg">
@@ -1160,6 +1189,8 @@ function updSummary(){
   const subCg=document.getElementById('sub-comm-grp');
   const depRow=document.getElementById('dep-row');
   if(depRow)depRow.style.display=hasDep?'grid':'none';
+  const srcRow=document.getElementById('src-row');
+  if(srcRow)srcRow.style.display=cid==='CT'?'grid':'none';
   if(cg)cg.style.display=isV?'none':'flex';
   if(interSec)interSec.style.display=isI?'block':'none';
   if(sSec)sSec.style.display=isI?'none':'flex';
@@ -1282,6 +1313,8 @@ function saveRide(id){
     passenger:g('f-pax'), note:g('f-note'),
     deposit:(document.getElementById('f-hasdep')?.checked?(+(document.getElementById('f-dep')?.value)||0):0),
     deposit_method:(document.getElementById('f-hasdep')?.checked?(document.getElementById('f-dep-method')?.value||'Card'):null),
+    source:client_id==='CT'?(document.getElementById('f-source')?.value||null):null,
+    channel:client_id==='CT'?(document.getElementById('f-channel')?.value||null):null,
     is_deposit:document.getElementById('f-deposit')?.checked||false,
     fatt_override:document.getElementById('f-fatt')?.value||null,
     createdAt:DATA.rides.find(x=>x.id===id)?.createdAt||Date.now()};
@@ -1450,6 +1483,16 @@ function rStats(){
   const ceilPct=Math.min(Math.round(fattYear/CEIL*100),100);
   const totExp=exps.reduce((s,x)=>s+ +x.amount,0);
   const netProfit=totEarned-totExp;
+  // Ciao Transfer own bookings
+  const OB=ownBreakdown(rides);
+  const obBook=uniqueBookings(OB.list);
+  const obCT=obBook.filter(ctDroveIt).length, obP=obBook.length-obCT;
+  const bySrc={};
+  OB.list.forEach(r=>{const k=r.source||'Not set';if(!bySrc[k])bySrc[k]={n:0,gross:0,net:0};bySrc[k].gross+=+r.price||0;bySrc[k].net+=rideEarned(r);});
+  obBook.forEach(r=>{bySrc[r.source||'Not set'].n++;});
+  const byChan={};
+  obBook.forEach(r=>{const k=r.channel||'Not set';byChan[k]=(byChan[k]||0)+1;});
+  const srcRows=Object.entries(bySrc).sort((a,b)=>b[1].gross-a[1].gross).map(([k,v])=>`<div class="info-row"><span>${k}</span><span class="fs12"><span class="mu">${v.n} booking${v.n===1?'':'s'} · ${eu(v.gross)} gross ·</span> <span class="fw6 tok">${eu(v.net)} net</span></span></div>`).join('');
 
   // By source (client) — gross received from each company
   const byClient={};
@@ -1504,6 +1547,26 @@ function rStats(){
     ${barchart(byClient,'te')}
     <div class="sep"></div>
     <div class="info-row mu fs12"><span>Go to Statements for full contact detail</span><button class="btn btn-sec btn-sm" onclick="go('statements')">Open Statements →</button></div>
+  </div>
+</div>
+
+<div class="two">
+  <div class="card">
+    <div class="ch"><span class="ct">Ciao Transfer bookings — ${mn}</span></div>
+    <div class="info-row"><span class="fw6">Total booked (gross)</span><span class="fw6 tpr" style="font-size:15px">${eu(OB.gross)}</span></div>
+    <div class="info-row" style="padding-left:18px"><span class="mu fs12">operated by CT · ${obCT} booking${obCT===1?'':'s'}</span><span class="fs12 fw6">${eu(OB.grossCT)}</span></div>
+    <div class="info-row" style="padding-left:18px"><span class="mu fs12">sent to partners · ${obP} booking${obP===1?'':'s'}</span><span class="fs12 fw6">${eu(OB.grossP)}</span></div>
+    <div class="info-row" style="border-top:2px solid var(--bd);margin-top:4px;padding-top:10px"><span class="fw6">Net income</span><span class="fw6 tok" style="font-size:15px">${eu(OB.net)}</span></div>
+    <div class="info-row" style="padding-left:18px"><span class="mu fs12">direct income (rides CT operates)</span><span class="fs12 fw6 tok">${eu(OB.direct)}</span></div>
+    <div class="info-row" style="padding-left:18px"><span class="mu fs12">commissions owed by partners</span><span class="fs12 fw6 tok">${eu(OB.partner)}</span></div>
+    <div class="info-row" style="padding-left:18px"><span class="mu fs12">deposits kept on partner rides</span><span class="fs12 fw6 tok">${eu(OB.deposit)}</span></div>
+    <div class="mu" style="font-size:11px;padding:6px 0 0">Own bookings only (site, email, WhatsApp). Net income is the same "Ciao Transfer" figure as in Share of earnings.</div>
+  </div>
+  <div class="card">
+    <div class="ch"><span class="ct">Where Ciao Transfer bookings came from — ${mn}</span></div>
+    ${srcRows||'<p class="mu fs12">No data for this period</p>'}
+    <div class="sep"></div>
+    <div class="mu fs12">Booked via: ${Object.entries(byChan).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`${k} ${v}`).join(' · ')||'—'}</div>
   </div>
 </div>
 
